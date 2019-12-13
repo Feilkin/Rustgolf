@@ -1,8 +1,7 @@
 //! Asset loading and such
 
-use crate::game::assets::image::Image;
-
 pub(crate) mod image;
+pub use crate::assets::image::Image;
 
 pub enum Asset {
     Image(Image),

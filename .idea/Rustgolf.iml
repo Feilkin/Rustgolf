@@ -6,6 +6,17 @@
       <sourceFolder url="file://$MODULE_DIR$/../Rustgolf\examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/../Rustgolf\tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/../Rustgolf\benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/minigolf/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/minigolf\examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/minigolf\tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/minigolf\benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/mela/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/mela\examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/mela\tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/mela\benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/../Rustgolf\src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/mela\target" />
+      <excludeFolder url="file://$MODULE_DIR$/minigolf\target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
