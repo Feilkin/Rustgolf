@@ -2,16 +2,17 @@
 
 use crate::components::physics::{Acceleration, Position, Velocity};
 use mela::ecs::{Component, Entity, ReadAccess, WriteAccess};
+use std::ops::Index;
 
 mod gfx;
 pub mod physics;
 
 #[derive(Debug, Default)]
 pub struct GolfComponents {
-    positions: Vec<(Entity, physics::Position)>,
-    velocities: Vec<(Entity, physics::Velocity)>,
-    accelerations: Vec<(Entity, physics::Acceleration)>,
-    shapes: Vec<physics::Shape>,
+    positions: Vec<Option<physics::Position>>,
+    velocities: Vec<Option<physics::Velocity>>,
+    accelerations: Vec<Option<physics::Acceleration>>,
+    shapes: Vec<Option<physics::Shape>>,
 }
 
 impl GolfComponents {
@@ -20,67 +21,68 @@ impl GolfComponents {
     }
 }
 
-impl mela::ecs::ComponentStorage for GolfComponents {
-    fn read<T>(&self) -> &[(Entity, T)]
-    where
-        T: Component,
-        Self: ReadAccess<T>,
-    {
-        ReadAccess::fetch(self)
+impl mela::ecs::ComponentStorage for GolfComponents {}
+
+// TODO: get rid of these, maybe with macro?
+fn vector_storage_insert<T: Component>(vector: &mut Vec<Option<T>>, entity: Entity, value: T) {
+    if vector.capacity() <= *entity {
+        vector.reserve(*entity - vector.capacity() + 1);
     }
 
-    fn write<T>(&mut self, entity: Entity, value: T)
-    where
-        T: Component,
-        Self: WriteAccess<T>,
-    {
-        WriteAccess::set(self, entity, value)
+    if vector.len() <= *entity {
+        for _ in 1..*entity - vector.len() {
+            vector.push(None);
+        }
+        vector.push(Some(value));
+    } else {
+        vector[*entity] = Some(value);
     }
 }
 
-// TODO: get rid of these, maybe with macro?
-
 impl WriteAccess<Position> for GolfComponents {
     fn set(&mut self, entity: Entity, value: Position) {
-        match self.positions.iter().position(|(e, _)| *e == entity) {
-            Some(index) => self.positions[index] = (entity, value),
-            None => self.positions.push((entity, value)),
-        }
+        vector_storage_insert(&mut self.positions, entity, value);
     }
 }
 
 impl WriteAccess<Velocity> for GolfComponents {
     fn set(&mut self, entity: Entity, value: Velocity) {
-        match self.velocities.iter().position(|(e, _)| *e == entity) {
-            Some(index) => self.velocities[index] = (entity, value),
-            None => self.velocities.push((entity, value)),
-        }
+        vector_storage_insert(&mut self.velocities, entity, value);
     }
 }
 
 impl WriteAccess<Acceleration> for GolfComponents {
     fn set(&mut self, entity: Entity, value: Acceleration) {
-        match self.accelerations.iter().position(|(e, _)| *e == entity) {
-            Some(index) => self.accelerations[index] = (entity, value),
-            None => self.accelerations.push((entity, value)),
-        }
+        vector_storage_insert(&mut self.accelerations, entity, value);
     }
 }
 
 impl ReadAccess<Position> for GolfComponents {
-    fn fetch(&self) -> &[(Entity, Position)] {
+    fn fetch(&self, entity: Entity) -> Option<&Position> {
+        self.positions.get(*entity).unwrap_or(&None).as_ref()
+    }
+
+    fn enumerate(&self) -> &[Option<Position>] {
         &self.positions
     }
 }
 
 impl ReadAccess<Velocity> for GolfComponents {
-    fn fetch(&self) -> &[(Entity, Velocity)] {
-        &self.velocities
+    fn fetch(&self, entity: Entity) -> Option<&Velocity> {
+        self.velocities.get(*entity).unwrap_or(&None).as_ref()
+    }
+
+    fn enumerate(&self) -> &[Option<Velocity>] {
+        unimplemented!()
     }
 }
 
 impl ReadAccess<Acceleration> for GolfComponents {
-    fn fetch(&self) -> &[(Entity, Acceleration)] {
-        &self.accelerations
+    fn fetch(&self, entity: Entity) -> Option<&Acceleration> {
+        self.accelerations.get(*entity).unwrap_or(&None).as_ref()
+    }
+
+    fn enumerate(&self) -> &[Option<Acceleration>] {
+        unimplemented!()
     }
 }

@@ -13,10 +13,10 @@ mod minigolf;
 mod states;
 
 use crate::states::LoadingScreen;
+use glium::DrawError::InstancesCountMismatch;
 use imgui::{FontConfig, FontSource};
 use minigolf::Minigolf;
 use std::time::Instant;
-use glium::DrawError::InstancesCountMismatch;
 
 fn main() {
     better_panic::install();
@@ -58,7 +58,7 @@ fn main() {
 
     let mut last_imgui_frame = Instant::now();
     let mut last_frame = Instant::now();
-    let delta_time_target = std::time::Duration::from_nanos(16_666_667);
+    let delta_time_target = std::time::Duration::from_nanos(16);
 
     el.run(move |event, window_target, control_flow| {
         use glutin::event::{Event, StartCause, WindowEvent};
@@ -125,7 +125,7 @@ fn main() {
             }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
                 display.gl_window().window().request_redraw();
-            },
+            }
             // we poll when last frame took too long
             Event::NewEvents(StartCause::Poll) => {
                 display.gl_window().window().request_redraw();

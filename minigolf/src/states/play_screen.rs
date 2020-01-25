@@ -2,6 +2,7 @@ use crate::components::physics::{Acceleration, Velocity};
 use crate::components::{physics::Position, GolfComponents};
 use crate::states::{LoadingScreen, State as GolfState};
 use imgui_glium_renderer::imgui::Ui;
+use itertools::izip;
 use mela::ecs::{Component, ComponentStorage, Entity, ReadAccess, World, WriteAccess};
 use mela::game::IoState;
 use mela::gfx::Spritebatch;
@@ -67,38 +68,19 @@ impl State for PlayScreen {
             ..
         } = self.world;
 
-        let new_vals: Vec<_> = entities
-            .iter()
-            .map(|e| {
-                (
-                    e,
-                    components
-                        .read::<Position>()
-                        .iter()
-                        .find(|(their, _)| e == their)
-                        .map_or(None, |(_, p)| Some(p)),
-                    components
-                        .read::<Velocity>()
-                        .iter()
-                        .find(|(their, _)| e == their)
-                        .map_or(None, |(_, v)| Some(v)),
-                    components
-                        .read::<Acceleration>()
-                        .iter()
-                        .find(|(their, _)| e == their)
-                        .map_or(None, |(_, a)| Some(a)),
-                )
-            })
-            .filter_map(|joint| match joint {
-                (e, Some(p), Some(v), Some(a)) => Some((*e, p, v, a)),
-                _ => None,
-            })
-            .map(|c| move_object(delta, c))
-            .collect();
-
-        for (entity, position, velocity) in new_vals {
-            components.write(entity, position);
-            components.write(entity, velocity);
+        for entity in &entities {
+            match (
+                components.fetch(*entity),
+                components.fetch(*entity),
+                components.fetch(*entity),
+            ) {
+                (Some(p), Some(v), Some(a)) => {
+                    let (position, velocity) = move_entity(delta, p, v, a);
+                    components.write(*entity, position);
+                    components.write(*entity, velocity);
+                }
+                _ => (),
+            }
         }
 
         // DEBUGGING
@@ -128,8 +110,11 @@ impl State for PlayScreen {
 
         let mut spritebatch = Spritebatch::new(&self.spritesheet);
 
-        for (_, position) in self.world.components.read::<Position>() {
-            spritebatch = spritebatch.add_quad(0, [position.x, position.y]);
+        for maybe_position in self.world.components.fetch_all::<Position>() {
+            match maybe_position {
+                Some(position) => spritebatch = spritebatch.add_quad(0, [position.x, position.y]),
+                None => (),
+            }
         }
 
         spritebatch.draw(camera_matrix, display, target, &self.img_shader);
@@ -142,14 +127,18 @@ impl From<LoadingScreen> for PlayScreen {
 
         let mut world = World::new(GolfComponents::new());
 
-        for i in 1..32 {
-            world = world
-                .add_entity()
-                .with_component(Position::new(10., 20. * i as f32))
-                .with_component(Velocity::new(10., 0.))
-                .with_component(Acceleration::new(0., 0.))
-                .build()
+        for x in 0..40 {
+            for y in 0..30 {
+                world = world
+                    .add_entity()
+                    .with_component(Position::new(20. * x as f32, 20. * y as f32))
+                    .with_component(Velocity::new(0., 0.))
+                    .with_component(Acceleration::new(10., 0.))
+                    .build();
+            }
         }
+
+        println!("done setting up world");
 
         PlayScreen {
             ui_state: UiState::default(),
@@ -160,19 +149,20 @@ impl From<LoadingScreen> for PlayScreen {
     }
 }
 
-fn move_object(
+fn move_entity(
     delta: Duration,
-    components: (Entity, &Position, &Velocity, &Acceleration),
-) -> (Entity, Position, Velocity) {
-    let (entity, position, velocity, acceleration) = components;
+    position: &Position,
+    velocity: &Velocity,
+    acceleration: &Acceleration,
+) -> (Position, Velocity) {
     // I read somewhere that this gives better results than just updating velocity completely
     let half_of_velocity_delta = **acceleration * 0.5 * delta.as_secs_f32();
     let velocity = **velocity + half_of_velocity_delta;
-    let position = **position + velocity * delta.as_secs_f32();
+    let mut position = **position + velocity * delta.as_secs_f32();
 
-    (
-        entity,
-        position.into(),
-        (velocity + half_of_velocity_delta).into(),
-    )
+    if position.x > 808. {
+        position.x = -16.
+    }
+
+    (position.into(), (velocity + half_of_velocity_delta).into())
 }

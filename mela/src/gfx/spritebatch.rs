@@ -28,15 +28,18 @@ impl<'a> Spritebatch<'a> {
             spritesheet,
             mut vertices,
             mut indices,
-            quad_count
+            quad_count,
         } = self;
 
         let (quad_vertices, quad_indices) = spritesheet
             .quad(quad_index)
             .vertices_and_indices(position, [16., 16.]);
 
+        // offset indices
+        let index_offset = vertices.len() as u16;
+
         vertices.extend_from_slice(&quad_vertices);
-        indices.extend_from_slice(&quad_indices);
+        indices.extend(quad_indices.iter().map(|i| i + index_offset));
 
         Spritebatch {
             quad_count: quad_count + 1,

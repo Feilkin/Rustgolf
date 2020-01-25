@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 better-panic = "0.2.0"
+itertools = "0.8.2"
 mela = { path = "../mela" }
 replace_with = "0.1.5"
 imgui-glium-renderer = { path = "../../imgui-rs/imgui-glium-renderer" }
