@@ -1,12 +1,14 @@
 //! My game framework
 
 pub mod assets;
+pub mod ecs;
 pub mod game;
 pub mod gfx;
 pub mod state;
 
 pub use glium;
-pub use glutin;
+pub use glium::glutin;
+pub use imgui;
 pub use nalgebra;
 pub use ncollide2d;
 

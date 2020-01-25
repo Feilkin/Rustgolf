@@ -6,9 +6,10 @@ use gl::types::{GLint, GLuint};
 use image::{DynamicImage, GenericImageView, ImageError};
 
 use crate::assets::{Asset, AssetError};
-use crate::gfx::Texture;
+use crate::gfx::{Quad, Texture};
 use glium::texture::TextureCreationError;
 use std::ffi::c_void;
+use std::fmt::Debug;
 
 impl From<ImageError> for AssetError {
     fn from(ie: ImageError) -> AssetError {
@@ -22,23 +23,28 @@ impl From<glium::texture::TextureCreationError> for AssetError {
     }
 }
 
+// TODO: this should probably be a newtype over image::DynamicImage
 pub struct Image {
     inner: DynamicImage,
-    texture: glium::texture::Texture2d,
+    texture: Texture,
     dimensions: (u32, u32),
 }
 
 impl Image {
-    pub fn from_file<P: AsRef<Path>>(
+    pub fn from_file<P: AsRef<Path> + Debug>(
         filename: P,
         display: &glium::Display,
     ) -> Result<Image, AssetError> {
-        let img = image::open(filename)?;
-        let (width, height) = img.dimensions();
-        let data = img.as_rgb8().expect("could not convert to rgba8").clone();
+        dbg!(&filename);
 
-        let img_data = glium::texture::RawImage2d::from_raw_rgb(data.to_vec(), (width, height));
-        let texture = glium::texture::Texture2d::new(display, img_data)?;
+        let img = image::open(filename)?;
+
+        let (width, height) = img.dimensions();
+        let data = img.to_rgba();
+
+        // TODO: this should probably be done in the From trait
+        let img_data = glium::texture::RawImage2d::from_raw_rgba(data.to_vec(), (width, height));
+        let texture = Texture::new(display, img_data)?;
 
         Ok(Image {
             inner: img,

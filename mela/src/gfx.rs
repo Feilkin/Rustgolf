@@ -4,9 +4,25 @@ use crate::assets::image::Image;
 use glium::implement_vertex;
 
 mod mesh;
-mod spritesheet;
+mod spritebatch;
+pub use spritebatch::Spritebatch;
 
 pub use glium::texture::Texture2d as Texture;
+
+#[derive(Debug, Clone, Copy)]
+pub struct TextureId(usize);
+
+impl From<usize> for TextureId {
+    fn from(id: usize) -> Self {
+        TextureId(id)
+    }
+}
+
+impl From<TextureId> for usize {
+    fn from(id: TextureId) -> Self {
+        id.0
+    }
+}
 
 pub use mesh::Mesh;
 
@@ -16,14 +32,14 @@ pub struct Vertex {
     pub tex_coords: [f32; 2],
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Quad {
     position: [f32; 2],
     size: [f32; 2],
 }
 
 impl Quad {
-    pub fn new(position: [f32; 2], size: [f32; 2], image: &Image) -> Quad {
-        let source_dimensions = image.dimensions();
+    pub fn new(position: [f32; 2], size: [f32; 2], source_dimensions: (u32, u32)) -> Quad {
         let sw = source_dimensions.0 as f32;
         let sh = source_dimensions.1 as f32;
 
