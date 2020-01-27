@@ -13,4 +13,5 @@ pub trait Playable {
 #[derive(Default)]
 pub struct IoState {
     pub mouse_position: [f32; 2],
+    pub mouse_buttons: [bool; 3],
 }

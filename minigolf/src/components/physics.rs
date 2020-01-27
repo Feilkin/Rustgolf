@@ -2,6 +2,7 @@
 
 use mela::ecs::{Component, Entity};
 use mela::nalgebra::{Point2, Vector2};
+use mela::ncollide2d::query::Contact;
 use std::ops::Deref;
 
 #[derive(Debug)]
@@ -11,7 +12,7 @@ pub enum Shape {
 
 /// Position of physics body (its center point)
 #[derive(Debug, Clone, Copy)]
-pub struct Position(Point2<f32>);
+pub struct Position(pub Point2<f32>);
 
 impl Position {
     pub fn new(x: f32, y: f32) -> Position {
@@ -41,6 +42,10 @@ pub struct Velocity(Vector2<f32>);
 impl Velocity {
     pub fn new(x: f32, y: f32) -> Velocity {
         Velocity(Vector2::new(x, y))
+    }
+
+    pub fn new_from(vector: Vector2<f32>) -> Velocity {
+        Velocity(vector)
     }
 }
 
@@ -85,13 +90,14 @@ impl From<Vector2<f32>> for Acceleration {
     }
 }
 
+#[derive(Debug)]
 pub enum PhysicsEvent {
     Collision {
         cause: Entity,
         other: Entity,
-        point1: Point2<f32>,
-        point2: Point2<f32>,
-        depth: f32,
+        contact: Contact<f32>,
         toi: f32,
     },
 }
+
+impl Component for PhysicsEvent {}

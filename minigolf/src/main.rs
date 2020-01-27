@@ -75,7 +75,11 @@ fn main() {
                 ..
             } => *control_flow = ControlFlow::Exit,
             Event::WindowEvent {
-                event: WindowEvent::CursorMoved { position, .. },
+                event: WindowEvent::CursorMoved { .. },
+                ..
+            }
+            | Event::WindowEvent {
+                event: WindowEvent::MouseInput { .. },
                 ..
             } => {
                 game.push_event(&event);

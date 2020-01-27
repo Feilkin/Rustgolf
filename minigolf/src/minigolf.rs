@@ -68,6 +68,32 @@ impl Playable for Minigolf {
                 // TODO: hidpi support?
                 self.io_state.mouse_position = [position.x as f32, position.y as f32]
             }
+            Event::WindowEvent {
+                event:
+                    WindowEvent::MouseInput {
+                        state,
+                        button,
+                        modifiers,
+                        ..
+                    },
+                ..
+            } => {
+                use mela::glutin::event::{ElementState, MouseButton};
+
+                let button_num = match button {
+                    MouseButton::Left => 0,
+                    MouseButton::Right => 1,
+                    MouseButton::Middle => 2,
+                    _ => panic!("invalid button {:?}", button),
+                };
+
+                let state = match state {
+                    ElementState::Pressed => true,
+                    ElementState::Released => false,
+                };
+
+                self.io_state.mouse_buttons[button_num] = state;
+            }
             _ => (),
         };
 
