@@ -1,6 +1,6 @@
 //! Entity related stuff
 
-use crate::ecs::world::World;
+use crate::ecs::world::{World, WorldStorage};
 use crate::ecs::{Component, ComponentStorage, WriteAccess};
 use serde::export::PhantomData;
 use std::ops::Deref;
@@ -27,10 +27,7 @@ impl<W: World> EntityBuilder<W> {
     /// constructs a new EntityBuilder from new entity, and a World.
     /// Consumes the World.
     pub fn new(new_entity: Entity, world: W) -> EntityBuilder<W> {
-        EntityBuilder {
-            new_entity,
-            world,
-        }
+        EntityBuilder { new_entity, world }
     }
 
     /// consumes this entity builder, returning the new world
@@ -39,11 +36,10 @@ impl<W: World> EntityBuilder<W> {
     }
 
     /// adds Component for the new Entity into the World
-    pub fn with_component<'d, 'a, T>(self, component: T) -> EntityBuilder<W>
+    pub fn with_component<T>(self, component: T) -> EntityBuilder<W>
     where
-        'd: 'a,
-        T: 'd + Component,
-        W: 'd + ComponentStorage<'d, 'a, T>,
+        T: Component,
+        W: WorldStorage<T>,
     {
         let EntityBuilder {
             new_entity,
@@ -51,22 +47,13 @@ impl<W: World> EntityBuilder<W> {
             ..
         } = self;
 
-        // TODO: write component
-        //let DefaultWorld { mut components, .. } = self.world;
-        //ComponentStorage::write(&mut components, self.new_entity, component);
-        {
-            let mut writer = world.write();
-            WriteAccess::set(&mut writer, new_entity, component);
-
-            // writer dropped here
-        }
+        world.mut_storage().write().set(new_entity, component);
 
         EntityBuilder {
             new_entity,
             world,
             ..self
         }
-        // compiler complains that world is still borrowed here?
     }
 
     /// builds the entity, immediately calling add_entity on the underlying World.

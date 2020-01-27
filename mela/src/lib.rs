@@ -1,4 +1,5 @@
 //! My game framework
+#![feature(generic_associated_types)]
 
 pub mod assets;
 pub mod ecs;

@@ -4,8 +4,8 @@ use crate::states::{LoadingScreen, State as GolfState};
 use imgui_glium_renderer::imgui::Ui;
 use itertools::izip;
 use mela::ecs::entity::EntityBuilder;
-use mela::ecs::world::World;
-use mela::ecs::{Component, ComponentStorage, Entity, ReadAccess, VecWriter, WriteAccess};
+use mela::ecs::world::{World, WorldStorage};
+use mela::ecs::{Component, ComponentStorage, Entity, ReadAccess, VecWriter, WriteAccess, VecStorage, VecReader, DequeStorage};
 use mela::game::IoState;
 use mela::gfx::Spritebatch;
 use mela::glium::{Display, Frame, Program};
@@ -63,9 +63,52 @@ impl World for MyWorld {
     }
 }
 
-impl<'v> From<&'v mut MyWorld> for VecWriter<'v, Position> {
-    fn from(w: &'v mut MyWorld) -> Self {
-        w.components.positions.write()
+// TODO: get rid of these
+impl WorldStorage<Position> for MyWorld {
+    type Storage = VecStorage<Position>;
+
+    fn storage(&self) -> &Self::Storage {
+        &self.components.positions
+    }
+
+    fn mut_storage(&mut self) -> &mut Self::Storage {
+        &mut self.components.positions
+    }
+}
+
+impl WorldStorage<Velocity> for MyWorld {
+    type Storage = VecStorage<Velocity>;
+
+    fn storage(&self) -> &Self::Storage {
+        &self.components.velocities
+    }
+
+    fn mut_storage(&mut self) -> &mut Self::Storage {
+        &mut self.components.velocities
+    }
+}
+
+impl WorldStorage<Acceleration> for MyWorld {
+    type Storage = VecStorage<Acceleration>;
+
+    fn storage(&self) -> &Self::Storage {
+        &self.components.accelerations
+    }
+
+    fn mut_storage(&mut self) -> &mut Self::Storage {
+        &mut self.components.accelerations
+    }
+}
+
+impl WorldStorage<PhysicsEvent> for MyWorld {
+    type Storage = DequeStorage<PhysicsEvent>;
+
+    fn storage(&self) -> &Self::Storage {
+        &self.components.physics_events
+    }
+
+    fn mut_storage(&mut self) -> &mut Self::Storage {
+        &mut self.components.physics_events
     }
 }
 
@@ -169,7 +212,7 @@ impl State for PlayScreen {
             ) {
                 (Some(p), Some(v)) => {
                     let collisions =
-                        collide_entities(delta, entity, p, v, &mut components.positions.read());
+                        collide_entities(delta, entity, p, v, &mut components.positions.read().iter());
                     new_events.extend(collisions);
                 }
                 _ => (),
@@ -182,12 +225,12 @@ impl State for PlayScreen {
             ..self.world
         };
 
-        //        for event in new_events {
-        //            world = world
-        //                .add_entity()
-        //                .with_component(event)
-        //                .build()
-        //        }
+        for event in new_events {
+            world = world
+                .add_entity()
+                .with_component(event)
+                .build()
+        }
 
         GolfState::Play(PlayScreen {
             ui_state: UiState {
@@ -207,7 +250,7 @@ impl State for PlayScreen {
 
         let mut spritebatch = Spritebatch::new(&self.spritesheet);
 
-        for (_entity, position) in self.world.components.fetch_all::<Position>() {
+        for (_entity, position) in self.world.components.positions.read().iter() {
             spritebatch = spritebatch.add_quad(0, [position.x, position.y]);
         }
 
