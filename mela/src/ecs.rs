@@ -14,15 +14,15 @@ use std::ops::Deref;
 use std::slice::Iter;
 
 /// An interface for component storages. See `VecStorage` for example implementation
-pub trait ComponentStorage<'d, C: 'd + Component> {
-    type Reader: ReadAccess<'d, C>;
-    type Writer: WriteAccess<C>;
+pub trait ComponentStorage<'d: 'a, 'a, C: 'd + Component> {
+    type Reader: ReadAccess<'a, C>;
+    type Writer: WriteAccess<'a, C>;
 
     /// returns slice of components, indexed by entity
-    fn read(&self) -> Self::Reader;
+    fn read(&'a self) -> Self::Reader;
 
     /// writes new component value for entity
-    fn write<T>(&mut self) -> Self::Writer;
+    fn write(&'a mut self) -> Self::Writer;
 }
 
 /// An interface for Component. Doesn't actually do anything yet, other than make sure our components are sized, and shareable across threads
@@ -30,19 +30,19 @@ pub trait Component: Sized + Send + Sync {}
 
 /// An interface that describes read access to a Component
 pub trait ReadAccess<'d, C: 'd + Component>: IntoIterator<Item = (Entity, &'d C)> {
-    fn fetch(&self, entity: Entity) -> Option<&C>;
+    fn fetch(&self, entity: Entity) -> Option<&'d C>;
 }
 
 /// An interface that describes write access to a Component
-pub trait WriteAccess<C: Component> {
+pub trait WriteAccess<'d, C: 'd + Component> {
     /// sets value of Component for Entity
-    fn set(&mut self, entity: Entity, value: C);
+    fn set(&'d mut self, entity: Entity, value: C);
 
     /// unsets value of Component for Entity
-    fn unset(&mut self, entity: Entity);
+    fn unset(&'d mut self, entity: Entity);
 
     /// clears this Component storage, unsetting the value for each Entity
-    fn clear(&mut self);
+    fn clear(&'d mut self);
 }
 
 // Storage types
@@ -99,7 +99,7 @@ impl<'v, C: Component> IntoIterator for VecReader<'v, C> {
 
 // ReadAccess requires the struct to implement IntoIterator
 impl<'v, C: 'v + Component> ReadAccess<'v, C> for VecReader<'v, C> {
-    fn fetch(&self, entity: Entity) -> Option<&C> {
+    fn fetch(&self, entity: Entity) -> Option<&'v C> {
         self.data.get(*entity).unwrap_or(&None).as_ref()
     }
 }
@@ -115,7 +115,7 @@ impl<'v, C: Component> VecWriter<'v, C> {
     }
 }
 
-impl<'v, C: Component> WriteAccess<C> for VecWriter<'v, C> {
+impl<'v, C: Component> WriteAccess<'v, C> for VecWriter<'v, C> {
     fn set(&mut self, entity: Entity, value: C) {
         if self.data.capacity() <= *entity {
             self.data.reserve(*entity - self.data.capacity() + 1);
@@ -142,15 +142,15 @@ impl<'v, C: Component> WriteAccess<C> for VecWriter<'v, C> {
 
 // finally, we can implement CompontentStorage for VecStorage using the reader and writer we
 // implemented above
-impl<'v, C: 'v + Component + Debug> ComponentStorage<'v, C> for VecStorage<C> {
-    type Reader = VecReader<'v, C>;
-    type Writer = VecWriter<'v, C>;
+impl<'v: 'a, 'a, C: 'v + Component + Debug> ComponentStorage<'v, 'a, C> for VecStorage<C> {
+    type Reader = VecReader<'a, C>;
+    type Writer = VecWriter<'a, C>;
 
-    fn read(&self) -> Self::Reader {
+    fn read(&'a self) -> Self::Reader {
         VecReader::new(&self.data)
     }
 
-    fn write<T>(&mut self) -> Self::Writer {
+    fn write(&'a mut self) -> Self::Writer {
         VecWriter::new(&mut self.data)
     }
 }

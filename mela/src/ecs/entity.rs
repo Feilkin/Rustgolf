@@ -17,30 +17,33 @@ impl Deref for Entity {
     }
 }
 
-pub struct EntityBuilder<'w, W: 'w + World> {
+/// Adds new entity, and possible components, to a World.
+pub struct EntityBuilder<W: World> {
     new_entity: Entity,
     world: W,
-    phantom: PhantomData<&'w W>,
 }
 
-impl<'w, W: 'w + World> EntityBuilder<'w, W> {
-    pub fn new(new_entity: Entity, world: W) -> EntityBuilder<'w, W> {
+impl<W: World> EntityBuilder<W> {
+    /// constructs a new EntityBuilder from new entity, and a World.
+    /// Consumes the World.
+    pub fn new(new_entity: Entity, world: W) -> EntityBuilder<W> {
         EntityBuilder {
             new_entity,
             world,
-            phantom: PhantomData,
         }
     }
 
-    /// Consumes this entity builder, returning the new world
+    /// consumes this entity builder, returning the new world
     pub fn build(self) -> W {
         self.world
     }
 
-    pub fn with_component<T: 'w>(self, component: T) -> EntityBuilder<'w, W>
+    /// adds Component for the new Entity into the World
+    pub fn with_component<'d, 'a, T>(self, component: T) -> EntityBuilder<W>
     where
-        T: Component,
-        W: ComponentStorage<'w, T>,
+        'd: 'a,
+        T: 'd + Component,
+        W: 'd + ComponentStorage<'d, 'a, T>,
     {
         let EntityBuilder {
             new_entity,
@@ -52,8 +55,10 @@ impl<'w, W: 'w + World> EntityBuilder<'w, W> {
         //let DefaultWorld { mut components, .. } = self.world;
         //ComponentStorage::write(&mut components, self.new_entity, component);
         {
-            let mut writer = world.write::<T>();
+            let mut writer = world.write();
             WriteAccess::set(&mut writer, new_entity, component);
+
+            // writer dropped here
         }
 
         EntityBuilder {
@@ -61,10 +66,13 @@ impl<'w, W: 'w + World> EntityBuilder<'w, W> {
             world,
             ..self
         }
+        // compiler complains that world is still borrowed here?
     }
 
-    // convenient shortcute
-    pub fn add_entity(self) -> EntityBuilder<'w, W> {
+    /// builds the entity, immediately calling add_entity on the underlying World.
+    ///
+    /// Allows chaining of `add_entity()` calls.
+    pub fn add_entity(self) -> EntityBuilder<W> {
         self.build().add_entity()
     }
 }
