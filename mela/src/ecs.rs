@@ -2,18 +2,20 @@
 
 pub mod entity;
 pub mod world;
+pub mod system;
 
 pub use entity::Entity;
+pub use system::System;
 
 use crate::ecs::entity::EntityBuilder;
 use crate::ecs::world::World;
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::iter::{Enumerate, FilterMap};
 use std::net::Shutdown::Write;
 use std::ops::Deref;
-use std::slice::Iter;
 use std::rc::Rc;
-use std::collections::VecDeque;
+use std::slice::Iter;
 
 /// An interface for component storages. See `VecStorage` for example implementation
 pub trait ComponentStorage<C: Component> {
@@ -33,7 +35,9 @@ pub trait Component: Sized + Send + Sync {}
 /// An interface that describes read access to a Component
 pub trait ReadAccess<'r, C: Component> {
     fn fetch(&self, entity: Entity) -> Option<&C>;
-    fn iter<'a>(&'r self) -> Box<dyn Iterator<Item = (Entity, &'a C)> + 'a> where 'r: 'a;
+    fn iter<'a>(&'r self) -> Box<dyn Iterator<Item = (Entity, &'a C)> + 'a>
+    where
+        'r: 'a;
 }
 
 /// An interface that describes write access to a Component
@@ -87,7 +91,10 @@ impl<'v: 'r, 'r, C: 'v + Component> ReadAccess<'r, C> for VecReader<'v, C> {
         self.data.get(*entity).unwrap_or(&None).as_ref()
     }
 
-    fn iter<'a>(&'r self) -> Box<dyn Iterator<Item = (Entity, &'a C)> + 'a> where 'r: 'a {
+    fn iter<'a>(&'r self) -> Box<dyn Iterator<Item = (Entity, &'a C)> + 'a>
+    where
+        'r: 'a,
+    {
         Box::new(
             self.data
                 .iter()
@@ -142,7 +149,9 @@ impl<C: 'static + Component + Debug> ComponentStorage<C> for VecStorage<C> {
     type Reader<'r> = VecReader<'r, C>;
     type Writer<'w> = VecWriter<'w, C>;
 
-    fn read<'r, 'd: 'r>(&'d self) -> Self::Reader<'r> where C: 'r
+    fn read<'r, 'd: 'r>(&'d self) -> Self::Reader<'r>
+    where
+        C: 'r,
     {
         VecReader::new(&self.data)
     }
@@ -157,12 +166,14 @@ type DequeData<C> = VecDeque<(Entity, C)>;
 /// Deque-based storage for items that get added and cleared of (event-like)
 #[derive(Debug)]
 pub struct DequeStorage<C: Component + Debug> {
-    data: DequeData<C>
+    data: DequeData<C>,
 }
 
 impl<C: Component + Debug> Default for DequeStorage<C> {
     fn default() -> Self {
-        DequeStorage { data: VecDeque::new() }
+        DequeStorage {
+            data: VecDeque::new(),
+        }
     }
 }
 
@@ -173,7 +184,7 @@ impl<C: Component + Debug> DequeStorage<C> {
 }
 
 pub struct DequeReader<'d, C> {
-    data: &'d DequeData<C>
+    data: &'d DequeData<C>,
 }
 
 impl<'d, C> DequeReader<'d, C> {
@@ -187,15 +198,17 @@ impl<'d: 'r, 'r, C: 'd + Component> ReadAccess<'r, C> for DequeReader<'d, C> {
         unimplemented!()
     }
 
-    fn iter<'a>(&'r self) -> Box<dyn Iterator<Item=(Entity, &'a C)> + 'a> where 'r: 'a {
-        Box::new(self.data.iter().map(|(e, c)| (e.clone(), c) ))
+    fn iter<'a>(&'r self) -> Box<dyn Iterator<Item = (Entity, &'a C)> + 'a>
+    where
+        'r: 'a,
+    {
+        Box::new(self.data.iter().map(|(e, c)| (e.clone(), c)))
     }
 }
 
 pub struct DequeWriter<'d, C> {
-    data: &'d mut DequeData<C>
+    data: &'d mut DequeData<C>,
 }
-
 
 impl<'d, C> DequeWriter<'d, C> {
     pub fn new(data: &'d mut DequeData<C>) -> DequeWriter<'d, C> {
@@ -207,7 +220,7 @@ impl<'d: 'w, 'w, C: 'd + Component> WriteAccess<'w, C> for DequeWriter<'d, C> {
     fn set(&mut self, entity: Entity, value: C) {
         match self.data.iter().position(|(e, _)| *e == entity) {
             Some(index) => self.data[index] = (entity, value),
-            None => self.data.push_back((entity, value))
+            None => self.data.push_back((entity, value)),
         }
     }
 
@@ -224,7 +237,9 @@ impl<C: 'static + Component + Debug> ComponentStorage<C> for DequeStorage<C> {
     type Reader<'r> = DequeReader<'r, C>;
     type Writer<'w> = DequeWriter<'w, C>;
 
-    fn read<'r, 'd: 'r>(&'d self) -> Self::Reader<'r> where C: 'r
+    fn read<'r, 'd: 'r>(&'d self) -> Self::Reader<'r>
+    where
+        C: 'r,
     {
         DequeReader::new(&self.data)
     }

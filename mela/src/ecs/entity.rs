@@ -6,7 +6,7 @@ use serde::export::PhantomData;
 use std::ops::Deref;
 
 /// Entities are just ID's
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Entity(pub usize);
 
 impl Deref for Entity {

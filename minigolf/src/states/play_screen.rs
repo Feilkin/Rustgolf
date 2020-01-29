@@ -5,13 +5,14 @@ use imgui_glium_renderer::imgui::Ui;
 use itertools::izip;
 use mela::ecs::entity::EntityBuilder;
 use mela::ecs::world::{World, WorldStorage};
-use mela::ecs::{Component, ComponentStorage, Entity, ReadAccess, VecWriter, WriteAccess, VecStorage, VecReader, DequeStorage};
+use mela::ecs::{Component, ComponentStorage, DequeStorage, Entity, ReadAccess, VecReader, VecStorage, VecWriter, WriteAccess, System};
 use mela::game::IoState;
 use mela::gfx::Spritebatch;
 use mela::glium::{Display, Frame, Program};
 use mela::state::State;
 use mela::{glium, nalgebra};
 use nalgebra::{Point2, Vector2};
+use std::collections::HashSet;
 use std::fmt::{Debug, Error, Formatter};
 use std::net::Shutdown::Write;
 use std::time::Duration;
@@ -60,6 +61,14 @@ impl World for MyWorld {
                 ..self
             },
         )
+    }
+
+    fn remove_entity(self, entity: Entity) -> Self {
+        let MyWorld { mut entities, .. } = self;
+
+        entities.retain(|e| *e != entity);
+
+        MyWorld { entities, ..self }
     }
 }
 
@@ -117,6 +126,7 @@ pub struct PlayScreen {
     spritesheet: mela::assets::Spritesheet,
     ui_state: UiState,
     world: MyWorld,
+    systems: Vec<Box<dyn System<MyWorld>>>
 }
 
 impl Debug for PlayScreen {
@@ -156,19 +166,23 @@ impl State for PlayScreen {
         ui.show_demo_window(&mut demo_window_open);
 
         // TODO: ECS stuff
+        let mut systems = self.systems;
+        let mut world = self.world;
+
+        for system in systems.iter_mut() {
+            world = system.update(delta, world);
+        }
+
         let MyWorld {
             entities,
             mut components,
             ..
-        } = self.world;
+        } = world;
 
         // DEBUGGING
         use mela::imgui::im_str;
         ui.text(im_str!("entities: {}", entities.len()));
         ui.text(im_str!("fps: {}", 1.0 / delta.as_secs_f64()));
-
-        // clear events
-        //WriteAccess::<PhysicsEvent>::clear(&mut components);
 
         // player input
         match entities.first() {
@@ -188,22 +202,9 @@ impl State for PlayScreen {
         }
 
         // move
-        for entity in &entities {
-            match (
-                components.positions.read().fetch(*entity),
-                components.velocities.read().fetch(*entity),
-                components.accelerations.read().fetch(*entity),
-            ) {
-                (Some(p), Some(v), Some(a)) => {
-                    let (position, velocity) = move_entity(delta, p, v, a);
-                    components.positions.write().set(*entity, position);
-                    components.velocities.write().set(*entity, velocity);
-                }
-                _ => (),
-            }
-        }
 
         // collide
+        let mut collision_set = HashSet::new();
         let mut new_events = Vec::new();
         for entity in &entities {
             match (
@@ -211,25 +212,53 @@ impl State for PlayScreen {
                 components.velocities.read().fetch(*entity),
             ) {
                 (Some(p), Some(v)) => {
-                    let collisions =
-                        collide_entities(delta, entity, p, v, &mut components.positions.read().iter());
+                    let collisions = collide_entities(
+                        &mut collision_set,
+                        delta,
+                        entity,
+                        p,
+                        v,
+                        &mut components.positions.read().iter(),
+                    );
                     new_events.extend(collisions);
                 }
                 _ => (),
             }
         }
 
+        // handle collisions (these are frame late due to reasons)
+        let mut new_velocities = Vec::new();
+        for (event_entity, event) in components.physics_events.read().iter() {
+            match resolve_collision(
+                event,
+                components.velocities.read(),
+                components.positions.read(),
+            ) {
+                Some(stuff) => {
+                    new_velocities.push((event_entity, stuff));
+                }
+                None => (),
+            }
+        }
+
+        // clear events
+        components.physics_events.write().clear();
+
         let mut world = MyWorld {
             entities,
             components,
-            ..self.world
+            .. world
         };
 
+        for (event_entity, (e1, v1, e2, v2)) in new_velocities {
+            world.components.velocities.write().set(e1, v1);
+            world.components.velocities.write().set(e2, v2);
+
+            // remove entity???
+        }
+
         for event in new_events {
-            world = world
-                .add_entity()
-                .with_component(event)
-                .build()
+            world = world.add_entity().with_component(event).build()
         }
 
         GolfState::Play(PlayScreen {
@@ -237,6 +266,7 @@ impl State for PlayScreen {
                 demo_window_open,
                 ..self.ui_state
             },
+            systems,
             world,
             ..self
         })
@@ -279,6 +309,9 @@ impl From<LoadingScreen> for PlayScreen {
 
         PlayScreen {
             ui_state: UiState::default(),
+            systems: vec![
+                Box::new(FixedInterval::wrap(MoveSystem::new(), Duration::from_millis(20))),
+            ],
             world,
             img_shader,
             spritesheet,
@@ -298,28 +331,108 @@ fn player_input(delta: Duration, position: &Position, io: &IoState) -> Option<Ve
     }
 }
 
-fn move_entity(
-    delta: Duration,
-    position: &Position,
-    velocity: &Velocity,
-    acceleration: &Acceleration,
-) -> (Position, Velocity) {
-    // I read somewhere that this gives better results than just updating velocity completely
-    let half_of_velocity_delta = **acceleration * 0.5 * delta.as_secs_f32();
-    let velocity = **velocity + half_of_velocity_delta;
-    let mut position = **position + velocity * delta.as_secs_f32();
+struct FixedInterval<S: System<MyWorld>> {
+    inner: S,
+    delta_buffer: Duration,
+    tick_interval: Duration,
+}
 
-    if position.x > 808. {
-        position.x = -8.
+impl<S: System<MyWorld>> FixedInterval<S> {
+    pub fn wrap(system: S, interval: Duration) -> FixedInterval<S> {
+        FixedInterval {
+            inner: system,
+            tick_interval: interval,
+            delta_buffer: Duration::new(0, 0),
+        }
+    }
+}
+
+impl<S: System<MyWorld>> System<MyWorld> for FixedInterval<S> {
+    fn update(&mut self, delta: Duration, world: MyWorld) -> MyWorld {
+        self.delta_buffer += delta;
+        let mut world = world;
+
+        while self.delta_buffer >= self.tick_interval {
+            world = self.inner.update(self.tick_interval, world);
+
+            self.delta_buffer -= self.tick_interval;
+        }
+
+        world
+    }
+}
+
+struct MoveSystem {}
+
+impl MoveSystem {
+    pub fn new() -> MoveSystem {
+        MoveSystem {}
     }
 
-    (
-        position.into(),
-        (velocity * 0.998 + half_of_velocity_delta).into(),
-    )
+    fn move_entity(
+        delta: Duration,
+        position: &Position,
+        velocity: &Velocity,
+        acceleration: &Acceleration,
+    ) -> (Position, Velocity) {
+        // I read somewhere that this gives better results than just updating velocity completely
+        let half_of_velocity_delta = **acceleration * 0.5 * delta.as_secs_f32();
+        let velocity = **velocity + half_of_velocity_delta;
+        let mut position = **position + velocity * delta.as_secs_f32();
+
+        if position.x > 808. {
+            position.x = -8.
+        } else if position.x < -8. {
+            position.x = 808.
+        }
+
+        if position.y > 608. {
+            position.y = -8.
+        } else if position.y < -8. {
+            position.y = 608.
+        }
+
+        (
+            position.into(),
+            (velocity * 0.998 + half_of_velocity_delta).into(),
+        )
+    }
+}
+
+impl System<MyWorld> for MoveSystem {
+    fn update(&mut self, delta: Duration, world: MyWorld) -> MyWorld {
+        let MyWorld {
+            entities,
+            mut components,
+            ..
+        } = world;
+
+        for entity in &entities {
+            match (
+                components.positions.read().fetch(*entity),
+                components.velocities.read().fetch(*entity),
+                components.accelerations.read().fetch(*entity),
+            ) {
+                (Some(p), Some(v), Some(a)) => {
+                    let (position, velocity) =
+                        MoveSystem::move_entity(delta, p, v, a);
+                    components.positions.write().set(*entity, position);
+                    components.velocities.write().set(*entity, velocity);
+                }
+                _ => (),
+            }
+        }
+
+        MyWorld {
+            entities,
+            components,
+            ..world
+        }
+    }
 }
 
 fn collide_entities(
+    collision_set: &mut HashSet<(Entity, Entity)>,
     delta: Duration,
     entity: &Entity,
     position: &Position,
@@ -339,6 +452,11 @@ fn collide_entities(
 
     for (other_entity, other_position) in others {
         if other_entity == *entity {
+            continue;
+        }
+
+        // avoid creating 2 events for 1 collision
+        if collision_set.contains(&(other_entity, *entity)) {
             continue;
         }
 
@@ -370,7 +488,9 @@ fn collide_entities(
                         other: other_entity,
                         contact,
                         toi: toi.toi,
-                    })
+                    });
+
+                    collision_set.insert((*entity, other_entity));
                 }
             }
             _ => (), // no collision
@@ -378,4 +498,51 @@ fn collide_entities(
     }
 
     events
+}
+
+fn resolve_collision<'r, V: ReadAccess<'r, Velocity>, P: ReadAccess<'r, Position>>(
+    collision: &PhysicsEvent,
+    velocities: V,
+    positions: P,
+) -> Option<(Entity, Velocity, Entity, Velocity)> {
+    match collision {
+        PhysicsEvent::Collision {
+            cause,
+            other,
+            contact,
+            ..
+        } => {
+            let (cause, other) = (*cause, *other);
+            let cause_velocity = **velocities.fetch(cause).unwrap();
+            let other_velocity = **velocities.fetch(other).unwrap();
+            let cause_position = contact.world1;
+            let other_position = contact.world2;
+
+            let pos_diff = &cause_position - &other_position;
+            let pos_diff2 = &other_position - &cause_position;
+
+            // TODO: implement mass
+            let (cause_mass, other_mass) = (1f32, 1f32);
+
+            let new_cause_velocity = &cause_velocity
+                - ((2. * other_mass) / (cause_mass + other_mass))
+                    * ((&cause_velocity - &other_velocity).dot(&pos_diff)
+                        / (pos_diff.norm().powf(2.0)))
+                    * pos_diff;
+
+            let new_other_velocity = &other_velocity
+                - ((2. * cause_mass) / (cause_mass + other_mass))
+                    * ((&other_velocity - &cause_velocity).dot(&pos_diff2)
+                        / (pos_diff2.norm().powf(2.0)))
+                    * pos_diff2;
+
+            Some((
+                cause,
+                new_cause_velocity.into(),
+                other,
+                new_other_velocity.into(),
+            ))
+        }
+        _ => None,
+    }
 }
