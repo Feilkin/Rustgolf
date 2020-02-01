@@ -49,9 +49,12 @@ impl Playable for Minigolf {
         display: &glium::Display,
         ui: &mut mela::imgui::Ui,
     ) -> Minigolf {
-        let next_state = self
+        let mut next_state = self
             .current_state
             .update(delta, display, ui, &self.io_state);
+
+        // TODO: move this somewhere
+        next_state.update_debug_ui(ui);
 
         Minigolf {
             current_state: next_state,

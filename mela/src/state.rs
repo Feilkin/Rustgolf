@@ -18,4 +18,7 @@ pub trait State {
         io_state: &IoState,
     ) -> Self::Wrapper;
     fn redraw(&self, display: &glium::Display, target: &mut glium::Frame);
+
+    //TODO: make this #[cfg(debugger)] or something
+    fn update_debug_ui(&mut self, ui: &mut imgui::Ui) {}
 }

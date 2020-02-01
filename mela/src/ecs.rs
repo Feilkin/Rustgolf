@@ -1,8 +1,8 @@
 //! my own entity component system
 
 pub mod entity;
-pub mod world;
 pub mod system;
+pub mod world;
 
 pub use entity::Entity;
 pub use system::System;

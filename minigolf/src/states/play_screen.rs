@@ -1,11 +1,14 @@
 use crate::components::physics::{Acceleration, PhysicsEvent, Velocity};
 use crate::components::{physics::Position, GolfComponents};
-use crate::states::{LoadingScreen, State as GolfState};
+use crate::states::{LoadingScreen, State as GolfState, StateDebugger};
 use imgui_glium_renderer::imgui::Ui;
 use itertools::izip;
 use mela::ecs::entity::EntityBuilder;
 use mela::ecs::world::{World, WorldStorage};
-use mela::ecs::{Component, ComponentStorage, DequeStorage, Entity, ReadAccess, VecReader, VecStorage, VecWriter, WriteAccess, System};
+use mela::ecs::{
+    Component, ComponentStorage, DequeStorage, Entity, ReadAccess, System, VecReader, VecStorage,
+    VecWriter, WriteAccess,
+};
 use mela::game::IoState;
 use mela::gfx::Spritebatch;
 use mela::glium::{Display, Frame, Program};
@@ -18,9 +21,7 @@ use std::net::Shutdown::Write;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Default)]
-struct UiState {
-    demo_window_open: bool,
-}
+struct UiState {}
 
 struct MyWorld {
     next_entity_id: usize,
@@ -130,6 +131,7 @@ pub struct PlayScreen {
     world: MyWorld,
     systems: Vec<Box<dyn System<MyWorld>>>,
     last_frame_delta: Duration,
+    is_debugged: bool,
 }
 
 impl Debug for PlayScreen {
@@ -165,8 +167,17 @@ impl State for PlayScreen {
         ui: &mut mela::imgui::Ui,
         io_state: &IoState,
     ) -> GolfState {
-        let mut demo_window_open = self.ui_state.demo_window_open;
-        ui.show_demo_window(&mut demo_window_open);
+        use mela::imgui::*;
+        if !self.is_debugged {
+            if ui.button(im_str!("debug!"), [0., 0.]) {
+                return GolfState::StateDebugger(Box::new(StateDebugger::new(GolfState::Play(
+                    PlayScreen {
+                        is_debugged: true,
+                        ..self
+                    },
+                ))));
+            }
+        }
 
         // TODO: ECS stuff
         let mut systems = self.systems;
@@ -181,12 +192,6 @@ impl State for PlayScreen {
             mut components,
             ..
         } = world;
-
-        // DEBUGGING
-        use mela::imgui::im_str;
-        ui.text(im_str!("entities: {}", entities.len()));
-        ui.text(im_str!("fps: {}", 1.0 / delta.as_secs_f64()));
-        ui.text(im_str!("since last physics update: {}", (Instant::now() - world.last_physics_update).as_secs_f32()));
 
         // player input
         match entities.first() {
@@ -251,7 +256,7 @@ impl State for PlayScreen {
         let mut world = MyWorld {
             entities,
             components,
-            .. world
+            ..world
         };
 
         for (event_entity, (e1, v1, e2, v2)) in new_velocities {
@@ -266,10 +271,7 @@ impl State for PlayScreen {
         }
 
         GolfState::Play(PlayScreen {
-            ui_state: UiState {
-                demo_window_open,
-                ..self.ui_state
-            },
+            ui_state: UiState { ..self.ui_state },
             last_frame_delta: delta,
             systems,
             world,
@@ -293,17 +295,58 @@ impl State for PlayScreen {
             ) {
                 (Some(p), Some(v)) => {
                     let (p, v) = (**p, **v);
-                    let since_last_physics_update = Instant::now() - world.last_physics_update;
-                    let extrapolated_position = &p + &v * since_last_physics_update.as_secs_f32();
 
-                    spritebatch = spritebatch.add_quad(0, [extrapolated_position.x, extrapolated_position.y]);
+                    // dirty hack to disable extrapolation when debugging lol
+                    let pos = if !self.is_debugged {
+                        let since_last_physics_update = Instant::now() - world.last_physics_update;
+                        &p + &v * since_last_physics_update.as_secs_f32()
+                    } else {
+                        p
+                    };
+
+                    spritebatch =
+                        spritebatch.add_quad(0, [pos.x, pos.y]);
                 }
                 _ => (),
             }
         }
 
-
         spritebatch.draw(camera_matrix, display, target, &self.img_shader);
+    }
+
+    fn update_debug_ui(&mut self, ui: &mut mela::imgui::Ui) {
+        use mela::imgui::*;
+
+        Window::new(im_str!("Entities"))
+            .size([400., 300.], Condition::FirstUseEver)
+            .build(&ui, || {
+                ui.text(im_str!("total count: {}", self.world.entities.len()));
+
+                for entity in &self.world.entities {
+                    if CollapsingHeader::new(ui, &im_str!("Entity #{}", **entity))
+                        .bullet(true)
+                        .build() {
+                        if let Some(p) = self.world.components.positions.read().fetch(*entity) {
+                            let mut value: [f32; 2] = p.coords.into();
+
+                            ui.input_float2(&im_str!("Position"), &mut value)
+                                .build();
+                        }
+                        if let Some(p) = self.world.components.velocities.read().fetch(*entity) {
+                            let mut value: [f32; 2] = (**p).into();
+
+                            ui.input_float2(&im_str!("Velocity"), &mut value)
+                                .build();
+                        }
+                        if let Some(p) = self.world.components.accelerations.read().fetch(*entity) {
+                            let mut value: [f32; 2] = (**p).into();
+
+                            ui.input_float2(&im_str!("Acceleration"), &mut value)
+                                .build();
+                        }
+                    }
+                }
+            });
     }
 }
 
@@ -328,10 +371,12 @@ impl From<LoadingScreen> for PlayScreen {
 
         PlayScreen {
             ui_state: UiState::default(),
-            systems: vec![
-                Box::new(FixedInterval::wrap(MoveSystem::new(), Duration::from_millis(20))),
-            ],
+            systems: vec![Box::new(FixedInterval::wrap(
+                MoveSystem::new(),
+                Duration::from_millis(20),
+            ))],
             last_frame_delta: Duration::new(0, 0),
+            is_debugged: false,
             world,
             img_shader,
             spritesheet,
@@ -434,8 +479,7 @@ impl System<MyWorld> for MoveSystem {
                 components.accelerations.read().fetch(*entity),
             ) {
                 (Some(p), Some(v), Some(a)) => {
-                    let (position, velocity) =
-                        MoveSystem::move_entity(delta, p, v, a);
+                    let (position, velocity) = MoveSystem::move_entity(delta, p, v, a);
                     components.positions.write().set(*entity, position);
                     components.velocities.write().set(*entity, velocity);
                 }
