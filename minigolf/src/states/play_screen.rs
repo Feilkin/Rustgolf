@@ -15,7 +15,7 @@ use nalgebra::{Point2, Vector2};
 use std::collections::HashSet;
 use std::fmt::{Debug, Error, Formatter};
 use std::net::Shutdown::Write;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Default)]
 struct UiState {
@@ -26,6 +26,7 @@ struct MyWorld {
     next_entity_id: usize,
     entities: Vec<Entity>,
     components: GolfComponents,
+    last_physics_update: Instant,
 }
 
 impl MyWorld {
@@ -34,6 +35,7 @@ impl MyWorld {
             next_entity_id: 0,
             entities: Vec::new(),
             components: GolfComponents::default(),
+            last_physics_update: Instant::now(),
         }
     }
 }
@@ -126,7 +128,8 @@ pub struct PlayScreen {
     spritesheet: mela::assets::Spritesheet,
     ui_state: UiState,
     world: MyWorld,
-    systems: Vec<Box<dyn System<MyWorld>>>
+    systems: Vec<Box<dyn System<MyWorld>>>,
+    last_frame_delta: Duration,
 }
 
 impl Debug for PlayScreen {
@@ -183,6 +186,7 @@ impl State for PlayScreen {
         use mela::imgui::im_str;
         ui.text(im_str!("entities: {}", entities.len()));
         ui.text(im_str!("fps: {}", 1.0 / delta.as_secs_f64()));
+        ui.text(im_str!("since last physics update: {}", (Instant::now() - world.last_physics_update).as_secs_f32()));
 
         // player input
         match entities.first() {
@@ -266,6 +270,7 @@ impl State for PlayScreen {
                 demo_window_open,
                 ..self.ui_state
             },
+            last_frame_delta: delta,
             systems,
             world,
             ..self
@@ -280,9 +285,23 @@ impl State for PlayScreen {
 
         let mut spritebatch = Spritebatch::new(&self.spritesheet);
 
-        for (_entity, position) in self.world.components.positions.read().iter() {
-            spritebatch = spritebatch.add_quad(0, [position.x, position.y]);
+        let world = &self.world;
+        for entity in &world.entities {
+            match (
+                world.components.positions.read().fetch(*entity),
+                world.components.velocities.read().fetch(*entity),
+            ) {
+                (Some(p), Some(v)) => {
+                    let (p, v) = (**p, **v);
+                    let since_last_physics_update = Instant::now() - world.last_physics_update;
+                    let extrapolated_position = &p + &v * since_last_physics_update.as_secs_f32();
+
+                    spritebatch = spritebatch.add_quad(0, [extrapolated_position.x, extrapolated_position.y]);
+                }
+                _ => (),
+            }
         }
+
 
         spritebatch.draw(camera_matrix, display, target, &self.img_shader);
     }
@@ -312,6 +331,7 @@ impl From<LoadingScreen> for PlayScreen {
             systems: vec![
                 Box::new(FixedInterval::wrap(MoveSystem::new(), Duration::from_millis(20))),
             ],
+            last_frame_delta: Duration::new(0, 0),
             world,
             img_shader,
             spritesheet,
@@ -424,6 +444,7 @@ impl System<MyWorld> for MoveSystem {
         }
 
         MyWorld {
+            last_physics_update: Instant::now(),
             entities,
             components,
             ..world

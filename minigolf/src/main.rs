@@ -25,7 +25,9 @@ fn main() {
     let wb = glutin::window::WindowBuilder::new()
         .with_title("Rust golf test")
         .with_inner_size(glutin::dpi::LogicalSize::new(800.0, 600.0));
-    let cb = glutin::ContextBuilder::new();
+    let cb = glutin::ContextBuilder::new()
+        .with_vsync(true)
+        .with_multisampling(2);
     let display = glium::Display::new(wb, cb, &el).unwrap();
 
     // Set up imgui stuff
