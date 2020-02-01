@@ -195,7 +195,13 @@ impl<'d, C> DequeReader<'d, C> {
 
 impl<'d: 'r, 'r, C: 'd + Component> ReadAccess<'r, C> for DequeReader<'d, C> {
     fn fetch(&self, entity: Entity) -> Option<&C> {
-        unimplemented!()
+        for (other, component) in self.data {
+            if entity == *other {
+                return Some(component)
+            }
+        }
+
+        None
     }
 
     fn iter<'a>(&'r self) -> Box<dyn Iterator<Item = (Entity, &'a C)> + 'a>
