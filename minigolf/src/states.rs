@@ -6,9 +6,9 @@ use std::rc::Rc;
 
 use mela::state::State as MelaState;
 
-mod loading_screen;
-mod play_screen;
-mod state_debugger;
+pub mod loading_screen;
+pub mod play_screen;
+pub mod state_debugger;
 
 pub use loading_screen::LoadingScreen;
 use mela::game::IoState;

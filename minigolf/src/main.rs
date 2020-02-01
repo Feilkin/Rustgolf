@@ -11,6 +11,8 @@ use mela::{glium, glutin, imgui};
 mod components;
 mod minigolf;
 mod states;
+mod systems;
+mod world;
 
 use crate::states::LoadingScreen;
 use glium::DrawError::InstancesCountMismatch;
