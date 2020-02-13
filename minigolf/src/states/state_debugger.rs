@@ -10,6 +10,7 @@ use mela::state::State;
 use std::default::Default;
 use std::fmt::{Debug, Error, Formatter};
 use std::time::Duration;
+use mela::profiler;
 
 #[derive(Default)]
 struct UiState {
@@ -73,10 +74,12 @@ impl State for StateDebugger<GolfState> {
         display: &Display,
         ui: &mut Ui,
         io_state: &IoState,
+        profiler_frame: &mut profiler::OpenFrame,
     ) -> Self::Wrapper {
         use mela::imgui::*;
 
         let mut run_next_frame = false;
+        let mut resume_play = false;
 
         Window::new(im_str!("State debugger"))
             .size([300., 100.], Condition::Appearing)
@@ -84,22 +87,24 @@ impl State for StateDebugger<GolfState> {
                 if ui.button(im_str!("next frame"), [0., 0.]) {
                     run_next_frame = true;
                 }
+                if ui.button(im_str!("resume game"), [0., 0.]) {
+                    resume_play = true;
+                }
             });
 
         if run_next_frame {
-            let inner = self.inner.update(delta, display, ui, io_state);
+            let inner = self.inner.update(delta, display, ui, io_state, profiler_frame);
 
-            GolfState::StateDebugger(Box::new(StateDebugger {
-                inner,
-                .. self
-            }))
+            GolfState::StateDebugger(Box::new(StateDebugger { inner, ..self }))
+        } else if resume_play {
+            self.inner.into()
         } else {
             GolfState::StateDebugger(Box::new(self))
         }
     }
 
-    fn redraw(&self, display: &Display, target: &mut Frame) {
-        self.inner.redraw(display, target)
+    fn redraw(&mut self, display: &Display, target: &mut Frame, profiler_frame: &mut profiler::OpenFrame) {
+        self.inner.redraw(display, target, profiler_frame)
     }
 
     fn update_debug_ui(&mut self, ui: &mut mela::imgui::Ui) {

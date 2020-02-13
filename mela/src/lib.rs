@@ -5,6 +5,7 @@ pub mod assets;
 pub mod ecs;
 pub mod game;
 pub mod gfx;
+pub mod profiler;
 pub mod state;
 
 pub use glium;

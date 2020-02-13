@@ -2,18 +2,57 @@
 
 use crate::ecs::world::{World, WorldStorage};
 use crate::ecs::{Component, ComponentStorage, WriteAccess};
-use serde::export::PhantomData;
+use serde::export::fmt::Error;
+use serde::export::{Formatter, PhantomData};
 use std::ops::Deref;
 
-/// Entities are just ID's
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Entity(pub usize);
+/// Entities are just very complicated 64 bit numbers
+/// First 52 bits are the unique identity of this entity.
+/// Last bit (at position 63) tells if this entity is alive or dead.
+/// Rest are reserved.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Entity(pub u64);
 
-impl Deref for Entity {
-    type Target = usize;
+impl Entity {
+    pub fn new(id: u64) -> Entity {
+        Entity(id)
+    }
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    pub fn is_dead(&self) -> bool {
+        self.0 >> 63 == 1
+    }
+
+    pub fn kill(&mut self) -> Entity {
+        Entity(self.0 | 1 << 63)
+    }
+}
+
+impl std::fmt::Debug for Entity {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}{}]",
+            if self.is_dead() { '*' } else { ' ' },
+            usize::from(self)
+        )
+    }
+}
+
+impl From<&Entity> for usize {
+    fn from(e: &Entity) -> Self {
+        (e.0 & 0x00_0f_ff_ff_ff_ff_ff_ff) as usize
+    }
+}
+
+impl From<Entity> for usize {
+    fn from(e: Entity) -> Self {
+        (e.0 & 0x00_0f_ff_ff_ff_ff_ff_ff) as usize
+    }
+}
+
+impl From<usize> for Entity {
+    fn from(i: usize) -> Self {
+        Entity(i as u64)
     }
 }
 

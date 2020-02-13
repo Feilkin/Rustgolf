@@ -1,5 +1,7 @@
 //! My mini golf game all rights reserved
 
+#![deny(unused_must_use)]
+
 use better_panic;
 use imgui_glium_renderer::Renderer as ImguiRenderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
@@ -19,6 +21,7 @@ use glium::DrawError::InstancesCountMismatch;
 use imgui::{FontConfig, FontSource};
 use minigolf::Minigolf;
 use std::time::Instant;
+use mela::profiler::Profiler;
 
 fn main() {
     better_panic::install();
@@ -26,7 +29,7 @@ fn main() {
     let el = glutin::event_loop::EventLoop::new();
     let wb = glutin::window::WindowBuilder::new()
         .with_title("Rust golf test")
-        .with_inner_size(glutin::dpi::LogicalSize::new(800.0, 600.0));
+        .with_inner_size(glutin::dpi::LogicalSize::new(1920.0, 1080.0));
     let cb = glutin::ContextBuilder::new()
         .with_vsync(true)
         .with_multisampling(2);
@@ -64,6 +67,9 @@ fn main() {
     let mut last_frame = Instant::now();
     let delta_time_target = std::time::Duration::from_nanos(16);
 
+    let mut profiler = Some(Profiler::new(100));
+    let mut frame_counter: u64 = 0;
+
     el.run(move |event, window_target, control_flow| {
         use glutin::event::{Event, StartCause, WindowEvent};
         use glutin::event_loop::ControlFlow;
@@ -93,6 +99,8 @@ fn main() {
                 ..
             } => {
                 let this_frame_start = Instant::now();
+                let mut profiler_frame = profiler.take().unwrap().start_frame();
+                frame_counter += 1;
 
                 // update imgui
                 let io = imgui.io_mut();
@@ -105,14 +113,19 @@ fn main() {
                 // update game
                 let delta = Instant::now() - last_frame;
                 last_frame = Instant::now();
-                replace_with_or_abort(&mut game, |game| game.update(delta, &display, &mut ui));
+                replace_with_or_abort(&mut game, |game| game.update(delta, &display, &mut ui, &mut profiler_frame));
 
                 // render game
                 use glium::Surface;
                 let mut target = display.draw();
                 target.clear_color(1.0, 0.0, 1.0, 1.0);
 
-                game.redraw(&display, &mut target);
+                game.redraw(&display, &mut target, &mut profiler_frame);
+
+                let mut p = if frame_counter % 6 == 0 { profiler_frame.finish() } else { profiler_frame.ignore_frame() };
+                p.draw(&ui);
+
+                profiler = Some(p);
 
                 let draw_data = ui.render();
                 imgui_renderer

@@ -2,7 +2,7 @@
 
 use glium::uniforms::UniformsStorage;
 use glium::{uniform, Display, Surface};
-use mela::{glium, nalgebra};
+use mela::{glium, nalgebra, profiler};
 
 use crate::states::PlayScreen;
 use crate::states::State as GolfState;
@@ -13,6 +13,7 @@ use mela::gfx::{Mesh, Quad};
 use mela::state::State;
 use std::fmt::{Debug, Error, Formatter};
 use std::time::Duration;
+use mela::profiler::Profiler;
 
 pub struct LoadingScreen {
     loading_img: Option<Mesh>,
@@ -77,6 +78,7 @@ impl State for LoadingScreen {
         display: &glium::Display,
         ui: &mut mela::imgui::Ui,
         _io_state: &IoState,
+        _profiler_frame: &mut profiler::OpenFrame,
     ) -> GolfState {
         if self.done_loading() {
             GolfState::Play(PlayScreen::from(self))
@@ -92,7 +94,7 @@ impl State for LoadingScreen {
         }
     }
 
-    fn redraw(&self, display: &glium::Display, target: &mut glium::Frame) {
+    fn redraw(&mut self, display: &glium::Display, target: &mut glium::Frame, _profiler_frame: &mut profiler::OpenFrame) {
         let (width, height) = (800.0, 600.0);
 
         let camera_matrix =

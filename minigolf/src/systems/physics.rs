@@ -1,11 +1,13 @@
-use mela::ecs::{System, Entity, ReadAccess, WriteAccess, ComponentStorage};
-use std::time::{Duration, Instant};
-use crate::components::physics::{PhysicsEvent, Velocity, Acceleration, Position};
+use crate::components::physics::{Acceleration, PhysicsEvent, Position, Velocity};
+use mela::ecs::{ComponentStorage, Entity, ReadAccess, RwAccess, System, WriteAccess};
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 
-use mela::nalgebra::Vector2;
 use crate::world::MyWorld;
 use mela::ecs::world::World;
+use mela::nalgebra::Vector2;
+use mela::profiler;
+use mela::profiler::OpenTagTreeRoot;
 
 pub struct MoveSystem {}
 
@@ -25,16 +27,18 @@ impl MoveSystem {
         let velocity = **velocity + half_of_velocity_delta;
         let mut position = **position + velocity * delta.as_secs_f32();
 
-        if position.x > 808. {
+        let (screen_width, screen_height) = (1920., 1080.);
+
+        if position.x > screen_width + 8. {
             position.x = -8.
         } else if position.x < -8. {
-            position.x = 808.
+            position.x = screen_width + 8.
         }
 
-        if position.y > 608. {
+        if position.y > screen_height + 8. {
             position.y = -8.
         } else if position.y < -8. {
-            position.y = 608.
+            position.y = screen_height + 8.
         }
 
         (
@@ -62,6 +66,10 @@ impl System<MyWorld> for MoveSystem {
                     let (position, velocity) = MoveSystem::move_entity(delta, p, v, a);
                     components.positions.write().set(*entity, position);
                     components.velocities.write().set(*entity, velocity);
+                    components
+                        .accelerations
+                        .write()
+                        .set(*entity, Acceleration::new(0., 0.));
                 }
                 _ => (),
             }
@@ -83,7 +91,7 @@ pub struct CollisionGenerator {
 impl CollisionGenerator {
     pub fn new() -> CollisionGenerator {
         CollisionGenerator {
-            collision_set: HashSet::new()
+            collision_set: HashSet::new(),
         }
     }
 
@@ -137,7 +145,7 @@ impl CollisionGenerator {
                             delta.as_secs_f32(),
                             0.,
                         )
-                            .expect("should collide but didn't??");
+                        .expect("should collide but didn't??");
 
                         events.push(PhysicsEvent::Collision {
                             cause: entity.clone(),
@@ -165,7 +173,7 @@ impl System<MyWorld> for CollisionGenerator {
             ..
         } = world;
 
-        self.collision_set.clear();
+        //let mut current_collisions = HashSet::new();
 
         components.physics_events.write().clear();
 
@@ -193,7 +201,7 @@ impl System<MyWorld> for CollisionGenerator {
         let mut new_world = MyWorld {
             entities,
             components,
-            .. world
+            ..world
         };
 
         for event in new_events {
@@ -211,11 +219,17 @@ impl CollisionResolver {
         CollisionResolver {}
     }
 
-    fn resolve_collision<'r, V: ReadAccess<'r, Velocity>, P: ReadAccess<'r, Position>>(
+    fn resolve_collision<
+        'r,
+        V: RwAccess<'r, Velocity>,
+        P: ReadAccess<'r, Position>,
+        A: WriteAccess<'r, Acceleration>,
+    >(
         collision: &PhysicsEvent,
-        velocities: V,
+        mut velocities: V,
         positions: P,
-    ) -> Option<(Entity, Velocity, Entity, Velocity)> {
+        mut accelerations: A,
+    ) {
         match collision {
             PhysicsEvent::Collision {
                 cause,
@@ -226,35 +240,42 @@ impl CollisionResolver {
                 let (cause, other) = (*cause, *other);
                 let cause_velocity = **velocities.fetch(cause).unwrap();
                 let other_velocity = **velocities.fetch(other).unwrap();
-                let cause_position = contact.world1;
-                let other_position = contact.world2;
+                let cause_position = **positions.fetch(cause).unwrap();
+                let other_position = **positions.fetch(other).unwrap();
 
                 let pos_diff = &cause_position - &other_position;
-                let pos_diff2 = &other_position - &cause_position;
+                let pos_diff2 = -&pos_diff;
 
                 // TODO: implement mass
                 let (cause_mass, other_mass) = (1f32, 1f32);
 
                 let new_cause_velocity = &cause_velocity
                     - ((2. * other_mass) / (cause_mass + other_mass))
-                    * ((&cause_velocity - &other_velocity).dot(&pos_diff)
-                    / (pos_diff.norm().powf(2.0)))
-                    * pos_diff * 0.98;
+                        * ((&cause_velocity - &other_velocity).dot(&pos_diff)
+                            / (pos_diff.norm().powf(2.0)))
+                        * pos_diff
+                        * 0.97;
 
                 let new_other_velocity = &other_velocity
                     - ((2. * cause_mass) / (cause_mass + other_mass))
-                    * ((&other_velocity - &cause_velocity).dot(&pos_diff2)
-                    / (pos_diff2.norm().powf(2.0)))
-                    * pos_diff2 * 0.98;
+                        * ((&other_velocity - &cause_velocity).dot(&pos_diff2)
+                            / (pos_diff2.norm().powf(2.0)))
+                        * pos_diff2
+                        * 0.97;
 
-                Some((
+                velocities.set(cause, new_cause_velocity.into());
+                velocities.set(other, new_other_velocity.into());
+
+                accelerations.set(
                     cause,
-                    new_cause_velocity.into(),
+                    (pos_diff.normalize() * (contact.depth.powi(2) * 50.)).into(),
+                );
+                accelerations.set(
                     other,
-                    new_other_velocity.into(),
-                ))
+                    (pos_diff2.normalize() * (contact.depth.powi(2) * 50.)).into(),
+                );
             }
-            _ => None,
+            _ => (),
         }
     }
 }
@@ -263,33 +284,32 @@ impl System<MyWorld> for CollisionResolver {
     fn update(&mut self, delta: Duration, world: MyWorld) -> MyWorld {
         let MyWorld {
             mut components,
+            mut entities,
             ..
         } = world;
 
-        let mut new_velocities = Vec::new();
         for (event_entity, event) in components.physics_events.read().iter() {
-            match CollisionResolver::resolve_collision(
+            CollisionResolver::resolve_collision(
                 event,
-                components.velocities.read(),
+                components.velocities.write(),
                 components.positions.read(),
-            ) {
-                Some(stuff) => {
-                    new_velocities.push((event_entity, stuff));
-                }
-                None => (),
-            }
-        }
+                components.accelerations.write(),
+            );
 
-        for (event_entity, (e1, v1, e2, v2)) in new_velocities {
-            components.velocities.write().set(e1, v1);
-            components.velocities.write().set(e2, v2);
-
-            // remove entity???
+            entities
+                .iter_mut()
+                .find(|e| **e == event_entity)
+                .and_then(|e| {
+                    *e = e.kill();
+                    Some(())
+                })
+                .expect("tried to kill non-existing entity");
         }
 
         MyWorld {
             components,
-            .. world
+            entities,
+            ..world
         }
     }
 }

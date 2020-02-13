@@ -52,6 +52,8 @@ pub trait WriteAccess<'w, C: Component> {
     fn clear(&mut self);
 }
 
+pub trait RwAccess<'a, C: Component>: ReadAccess<'a, C> + WriteAccess<'a, C> {}
+
 // Storage types
 
 /// Sparse vector storage. Possible the fastest type in terms of read access.
@@ -88,7 +90,7 @@ impl<'r, C> VecReader<'r, C> {
 // ReadAccess requires the struct to implement IntoIterator
 impl<'v: 'r, 'r, C: 'v + Component> ReadAccess<'r, C> for VecReader<'v, C> {
     fn fetch(&self, entity: Entity) -> Option<&C> {
-        self.data.get(*entity).unwrap_or(&None).as_ref()
+        self.data.get(usize::from(entity)).unwrap_or(&None).as_ref()
     }
 
     fn iter<'a>(&'r self) -> Box<dyn Iterator<Item = (Entity, &'a C)> + 'a>
@@ -100,7 +102,7 @@ impl<'v: 'r, 'r, C: 'v + Component> ReadAccess<'r, C> for VecReader<'v, C> {
                 .iter()
                 .enumerate()
                 .filter_map(|(index, maybe_val)| match maybe_val {
-                    Some(val) => Some((Entity(index), val)),
+                    Some(val) => Some((index.into(), val)),
                     None => None,
                 }),
         )
@@ -120,17 +122,19 @@ impl<'v, C: Component> VecWriter<'v, C> {
 
 impl<'v: 'w, 'w, C: Component> WriteAccess<'w, C> for VecWriter<'v, C> {
     fn set(&mut self, entity: Entity, value: C) {
-        if self.data.capacity() <= *entity {
-            self.data.reserve(*entity - self.data.capacity() + 1);
+        let index = entity.into();
+
+        if self.data.capacity() <= index {
+            self.data.reserve(index - self.data.capacity() + 1);
         }
 
-        if self.data.len() <= *entity {
-            for _ in 1..*entity - self.data.len() {
+        if self.data.len() <= index {
+            for _ in 1..index - self.data.len() {
                 self.data.push(None);
             }
             self.data.push(Some(value));
         } else {
-            self.data[*entity] = Some(value);
+            self.data[index] = Some(value);
         }
     }
 
@@ -142,6 +146,29 @@ impl<'v: 'w, 'w, C: Component> WriteAccess<'w, C> for VecWriter<'v, C> {
         self.data.clear();
     }
 }
+
+impl<'v: 'w, 'w, C: Component> ReadAccess<'w, C> for VecWriter<'v, C> {
+    fn fetch(&self, entity: Entity) -> Option<&C> {
+        self.data.get(usize::from(entity)).unwrap_or(&None).as_ref()
+    }
+
+    fn iter<'a>(&'w self) -> Box<dyn Iterator<Item = (Entity, &'a C)> + 'a>
+    where
+        'w: 'a,
+    {
+        Box::new(
+            self.data
+                .iter()
+                .enumerate()
+                .filter_map(|(index, maybe_val)| match maybe_val {
+                    Some(val) => Some((index.into(), val)),
+                    None => None,
+                }),
+        )
+    }
+}
+
+impl<'v: 'w, 'w, C: Component> RwAccess<'w, C> for VecWriter<'v, C> {}
 
 // finally, we can implement CompontentStorage for VecStorage using the reader and writer we
 // implemented above
@@ -197,7 +224,7 @@ impl<'d: 'r, 'r, C: 'd + Component> ReadAccess<'r, C> for DequeReader<'d, C> {
     fn fetch(&self, entity: Entity) -> Option<&C> {
         for (other, component) in self.data {
             if entity == *other {
-                return Some(component)
+                return Some(component);
             }
         }
 

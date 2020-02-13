@@ -13,18 +13,17 @@ use mela::game::IoState;
 use mela::gfx::Spritebatch;
 use mela::glium::{Display, Frame, Program};
 use mela::state::State;
-use mela::{glium, nalgebra};
+use mela::{glium, nalgebra, profiler};
 use nalgebra::{Point2, Vector2};
 use std::collections::HashSet;
 use std::fmt::{Debug, Error, Formatter};
 use std::net::Shutdown::Write;
 use std::time::{Duration, Instant};
 
-use crate::systems::{
-    physics::*,
-    util::*,
-};
+use crate::systems::{physics::*, util::*};
 use crate::world::MyWorld;
+use glium::Surface;
+use mela::profiler::{Profiler, PushTag, PopTag};
 
 #[derive(Debug, Default)]
 struct UiState {}
@@ -71,6 +70,7 @@ impl State for PlayScreen {
         _display: &Display,
         ui: &mut mela::imgui::Ui,
         io_state: &IoState,
+        profiler_frame: &mut profiler::OpenFrame,
     ) -> GolfState {
         use mela::imgui::*;
         if !self.is_debugged {
@@ -83,6 +83,7 @@ impl State for PlayScreen {
                 ))));
             }
         }
+        let ecs_tag = profiler_frame.push_tag("ECS", [1., 0., 1., 1.]);
 
         // TODO: ECS stuff
         let mut systems = self.systems;
@@ -97,6 +98,8 @@ impl State for PlayScreen {
             mut components,
             ..
         } = world;
+
+        ecs_tag.pop_tag();
 
         // player input
         match entities.first() {
@@ -115,11 +118,12 @@ impl State for PlayScreen {
             None => (), // no balls, no interaction
         }
 
-        let mut world = MyWorld {
+        let world = MyWorld {
             entities,
             components,
             ..world
-        };
+        }
+        .remove_dead();
 
         GolfState::Play(PlayScreen {
             ui_state: UiState { ..self.ui_state },
@@ -130,8 +134,11 @@ impl State for PlayScreen {
         })
     }
 
-    fn redraw(&self, display: &Display, target: &mut Frame) {
-        let (width, height) = (800.0, 600.0);
+    fn redraw(&mut self, display: &Display, target: &mut Frame, profiler_frame: &mut profiler::OpenFrame) {
+        let draw_tag = profiler_frame.push_tag("redraw", [1., 0.87, 0.4, 1.]);
+
+        let (target_width, target_height) = target.get_dimensions();
+        let (width, height) = (target_width as f32, target_height as f32);
 
         let camera_matrix =
             nalgebra::Matrix4::new_orthographic(0.0_f32, width, height, 0.0, 0.0, 10.0);
@@ -155,18 +162,22 @@ impl State for PlayScreen {
                         p
                     };
 
-                    spritebatch =
-                        spritebatch.add_quad(0, [pos.x, pos.y]);
+                    spritebatch = spritebatch.add_quad(0, [pos.x - 8., pos.y - 8.]);
                 }
                 _ => (),
             }
         }
 
         spritebatch.draw(camera_matrix, display, target, &self.img_shader);
+
+        draw_tag.pop_tag();
     }
 
     fn update_debug_ui(&mut self, ui: &mut mela::imgui::Ui) {
         use mela::imgui::*;
+
+        let mut dummy = true;
+        ui.show_demo_window(&mut dummy);
 
         Window::new(im_str!("Entities"))
             .size([400., 300.], Condition::FirstUseEver)
@@ -174,26 +185,74 @@ impl State for PlayScreen {
                 ui.text(im_str!("total count: {}", self.world.entities.len()));
 
                 for entity in &self.world.entities {
-                    if CollapsingHeader::new(ui, &im_str!("Entity #{}", **entity))
+                    if CollapsingHeader::new(ui, &im_str!("Entity {:?}", entity))
                         .bullet(true)
-                        .build() {
+                        .build()
+                    {
                         if let Some(p) = self.world.components.positions.read().fetch(*entity) {
                             let mut value: [f32; 2] = p.coords.into();
 
-                            ui.input_float2(&im_str!("Position"), &mut value)
-                                .build();
+                            ui.input_float2(
+                                &im_str!("Position##{}", usize::from(entity)),
+                                &mut value,
+                            )
+                            .build();
+
+                            self.world
+                                .components
+                                .positions
+                                .write()
+                                .set(*entity, Position::new(value[0], value[1]));
                         }
+
                         if let Some(p) = self.world.components.velocities.read().fetch(*entity) {
                             let mut value: [f32; 2] = (**p).into();
 
-                            ui.input_float2(&im_str!("Velocity"), &mut value)
-                                .build();
+                            ui.input_float2(
+                                &im_str!("Velocity##{}", usize::from(entity)),
+                                &mut value,
+                            )
+                            .build();
+
+                            self.world
+                                .components
+                                .velocities
+                                .write()
+                                .set(*entity, Velocity::new(value[0], value[1]));
                         }
+
                         if let Some(p) = self.world.components.accelerations.read().fetch(*entity) {
                             let mut value: [f32; 2] = (**p).into();
 
                             ui.input_float2(&im_str!("Acceleration"), &mut value)
                                 .build();
+                        }
+
+                        if let Some(e) = self.world.components.physics_events.read().fetch(*entity)
+                        {
+                            TreeNode::new(ui, &im_str!("Physics Event##{}", usize::from(entity)))
+                                .build(|| match e {
+                                    PhysicsEvent::Collision {
+                                        cause,
+                                        other,
+                                        contact,
+                                        toi,
+                                    } => {
+                                        ui.text(im_str!("Cause: {:?}", &cause));
+                                        ui.text(im_str!("Other: {:?}", &other));
+
+                                        TreeNode::new(
+                                            ui,
+                                            &im_str!("Contact##{}", usize::from(entity)),
+                                        )
+                                        .build(|| {
+                                            ui.text(im_str!("depth: {}", &contact.depth));
+                                        });
+
+                                        ui.text(im_str!("toi:   {}", &toi));
+                                    }
+                                    _ => (),
+                                });
                         }
                     }
                 }
@@ -207,11 +266,11 @@ impl From<LoadingScreen> for PlayScreen {
 
         let mut world = MyWorld::new();
 
-        for x in 0..10 {
-            for y in 0..7 {
+        for x in 0..35 {
+            for y in 0..20 {
                 world = world
                     .add_entity()
-                    .with_component(Position::new(80. * x as f32, 80. * y as f32))
+                    .with_component(Position::new(20. * x as f32 + 8., 20. * y as f32 + 8.))
                     .with_component(Velocity::new(0., 0.))
                     .with_component(Acceleration::new(0., 0.))
                     .build();

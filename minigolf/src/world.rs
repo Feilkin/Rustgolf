@@ -1,9 +1,9 @@
+use crate::components::physics::{Acceleration, PhysicsEvent, Position, Velocity};
 use crate::components::GolfComponents;
-use std::time::Instant;
-use mela::ecs::{Entity, DequeStorage, VecStorage};
-use crate::components::physics::{PhysicsEvent, Acceleration, Velocity, Position};
-use mela::ecs::world::{WorldStorage, World};
 use mela::ecs::entity::EntityBuilder;
+use mela::ecs::world::{World, WorldStorage};
+use mela::ecs::{DequeStorage, Entity, VecStorage};
+use std::time::Instant;
 
 pub struct MyWorld {
     pub next_entity_id: usize,
@@ -35,7 +35,7 @@ impl World for MyWorld {
             ..
         } = self;
 
-        let new_entity = Entity(next_entity_id);
+        let new_entity = next_entity_id.into();
         entities.push(new_entity);
 
         EntityBuilder::new(
@@ -52,6 +52,14 @@ impl World for MyWorld {
         let MyWorld { mut entities, .. } = self;
 
         entities.retain(|e| *e != entity);
+
+        MyWorld { entities, ..self }
+    }
+
+    fn remove_dead(self) -> Self {
+        let MyWorld { mut entities, .. } = self;
+
+        entities.retain(|e| !e.is_dead());
 
         MyWorld { entities, ..self }
     }

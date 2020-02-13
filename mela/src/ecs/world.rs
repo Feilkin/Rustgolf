@@ -8,6 +8,7 @@ pub trait World: Sized {
     fn entities(&self) -> &[Entity];
     fn add_entity(self) -> EntityBuilder<Self>;
     fn remove_entity(self, entity: Entity) -> Self;
+    fn remove_dead(self) -> Self;
 }
 
 pub trait WorldStorage<C: Component>: World {

@@ -3,11 +3,12 @@
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::ControlFlow;
 use std::time::Duration;
+use crate::profiler;
 
-pub trait Playable {
-    fn update(self, delta: Duration, display: &glium::Display, ui: &mut imgui::Ui) -> Self;
+pub trait Playable: Sized {
+    fn update(self, delta: Duration, display: &glium::Display, ui: &mut imgui::Ui, profiler_frame: &mut profiler::OpenFrame) -> Self;
     fn push_event<T>(&mut self, event: &Event<T>) -> Option<ControlFlow>;
-    fn redraw(&self, display: &glium::Display, target: &mut glium::Frame);
+    fn redraw(&mut self, display: &glium::Display, target: &mut glium::Frame, profiler_frame: &mut profiler::OpenFrame);
 }
 
 #[derive(Default)]

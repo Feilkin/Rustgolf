@@ -2,6 +2,8 @@
 
 use crate::game::IoState;
 use std::time::Duration;
+use crate::profiler::Profiler;
+use crate::profiler;
 
 pub trait State {
     type Wrapper: State + Sized;
@@ -16,8 +18,9 @@ pub trait State {
         display: &glium::Display,
         ui: &mut imgui::Ui,
         io_state: &IoState,
+        profiler_frame: &mut profiler::OpenFrame
     ) -> Self::Wrapper;
-    fn redraw(&self, display: &glium::Display, target: &mut glium::Frame);
+    fn redraw(&mut self, display: &glium::Display, target: &mut glium::Frame, profiler_frame: &mut profiler::OpenFrame);
 
     //TODO: make this #[cfg(debugger)] or something
     fn update_debug_ui(&mut self, ui: &mut imgui::Ui) {}

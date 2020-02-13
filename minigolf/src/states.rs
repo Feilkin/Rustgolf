@@ -16,6 +16,8 @@ pub use play_screen::PlayScreen;
 pub use state_debugger::StateDebugger;
 use std::ops::Deref;
 use std::time::Duration;
+use mela::profiler::Profiler;
+use mela::profiler;
 
 #[derive(Debug)]
 pub enum State {
@@ -57,19 +59,20 @@ impl MelaState for State {
         display: &Display,
         ui: &mut mela::imgui::Ui,
         io_state: &IoState,
+        profiler_frame: &mut profiler::OpenFrame
     ) -> State {
         match self {
-            State::Loading(s) => s.update(delta, display, ui, io_state),
-            State::Play(s) => s.update(delta, display, ui, io_state),
-            State::StateDebugger(mut s) => s.update(delta, display, ui, io_state),
+            State::Loading(s) => s.update(delta, display, ui, io_state, profiler_frame),
+            State::Play(s) => s.update(delta, display, ui, io_state, profiler_frame),
+            State::StateDebugger(mut s) => s.update(delta, display, ui, io_state, profiler_frame),
         }
     }
 
-    fn redraw(&self, display: &Display, target: &mut Frame) {
+    fn redraw(&mut self, display: &Display, target: &mut Frame, profiler_frame: &mut profiler::OpenFrame) {
         match self {
-            State::Loading(s) => s.redraw(display, target),
-            State::Play(s) => s.redraw(display, target),
-            State::StateDebugger(s) => s.as_ref().redraw(display, target),
+            State::Loading(s) => s.redraw(display, target, profiler_frame),
+            State::Play(s) => s.redraw(display, target, profiler_frame),
+            State::StateDebugger(s) => s.as_mut().redraw(display, target, profiler_frame),
         }
     }
 

@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use glutin::event::{Event, StartCause, WindowEvent};
 use glutin::event_loop::ControlFlow;
-use mela::{glium, glutin};
+use mela::{glium, glutin, profiler};
 
 use mela;
 use mela::assets::{Asset, Image};
@@ -17,6 +17,7 @@ use mela::state::State;
 use crate::states;
 use crate::states::LoadingScreen;
 use std::time::Duration;
+use mela::profiler::Profiler;
 
 pub(crate) struct Minigolf {
     io_state: IoState,
@@ -48,10 +49,11 @@ impl Playable for Minigolf {
         delta: Duration,
         display: &glium::Display,
         ui: &mut mela::imgui::Ui,
+        profiler_frame: &mut profiler::OpenFrame
     ) -> Minigolf {
         let mut next_state = self
             .current_state
-            .update(delta, display, ui, &self.io_state);
+            .update(delta, display, ui, &self.io_state, profiler_frame);
 
         // TODO: move this somewhere
         next_state.update_debug_ui(ui);
@@ -103,7 +105,7 @@ impl Playable for Minigolf {
         None
     }
 
-    fn redraw(&self, display: &glium::Display, target: &mut glium::Frame) {
-        self.current_state.redraw(display, target);
+    fn redraw(&mut self, display: &glium::Display, target: &mut glium::Frame, profiler_frame: &mut profiler::OpenFrame) {
+        self.current_state.redraw(display, target, profiler_frame)
     }
 }

@@ -1,6 +1,6 @@
+use crate::world::MyWorld;
 use mela::ecs::System;
 use std::time::Duration;
-use crate::world::MyWorld;
 
 pub struct FixedInterval<S: System<MyWorld>> {
     inner: S,
@@ -39,9 +39,7 @@ pub struct SystemGroup {
 
 impl SystemGroup {
     pub fn new(group: Vec<Box<dyn System<MyWorld>>>) -> SystemGroup {
-        SystemGroup {
-            group
-        }
+        SystemGroup { group }
     }
 }
 
