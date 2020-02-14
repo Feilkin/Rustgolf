@@ -19,9 +19,9 @@ mod world;
 use crate::states::LoadingScreen;
 use glium::DrawError::InstancesCountMismatch;
 use imgui::{FontConfig, FontSource};
-use minigolf::Minigolf;
-use std::time::Instant;
 use mela::profiler::Profiler;
+use minigolf::Minigolf;
+use std::time::{Duration, Instant};
 
 fn main() {
     better_panic::install();
@@ -113,7 +113,9 @@ fn main() {
                 // update game
                 let delta = Instant::now() - last_frame;
                 last_frame = Instant::now();
-                replace_with_or_abort(&mut game, |game| game.update(delta, &display, &mut ui, &mut profiler_frame));
+                replace_with_or_abort(&mut game, |game| {
+                    game.update(delta, &display, &mut ui, &mut profiler_frame)
+                });
 
                 // render game
                 use glium::Surface;
@@ -122,7 +124,11 @@ fn main() {
 
                 game.redraw(&display, &mut target, &mut profiler_frame);
 
-                let mut p = if frame_counter % 6 == 0 { profiler_frame.finish() } else { profiler_frame.ignore_frame() };
+                let mut p = if frame_counter % 60 == 0 {
+                    profiler_frame.finish()
+                } else {
+                    profiler_frame.ignore_if_faster_than(Duration::from_millis(20))
+                };
                 p.draw(&ui);
 
                 profiler = Some(p);

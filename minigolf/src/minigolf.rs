@@ -16,8 +16,8 @@ use mela::state::State;
 
 use crate::states;
 use crate::states::LoadingScreen;
+use mela::profiler::{PopTag, Profiler, PushTag};
 use std::time::Duration;
-use mela::profiler::Profiler;
 
 pub(crate) struct Minigolf {
     io_state: IoState,
@@ -49,14 +49,16 @@ impl Playable for Minigolf {
         delta: Duration,
         display: &glium::Display,
         ui: &mut mela::imgui::Ui,
-        profiler_frame: &mut profiler::OpenFrame
+        profiler_frame: &mut profiler::OpenFrame,
     ) -> Minigolf {
-        let mut next_state = self
-            .current_state
-            .update(delta, display, ui, &self.io_state, profiler_frame);
+        let mut next_state =
+            self.current_state
+                .update(delta, display, ui, &self.io_state, profiler_frame);
 
         // TODO: move this somewhere
+        let debug_ui_tag = profiler_frame.push_tag("debug ui", [0.3, 0.8, 0.3, 1.0]);
         next_state.update_debug_ui(ui);
+        let _ = debug_ui_tag.pop_tag();
 
         Minigolf {
             current_state: next_state,
@@ -105,7 +107,12 @@ impl Playable for Minigolf {
         None
     }
 
-    fn redraw(&mut self, display: &glium::Display, target: &mut glium::Frame, profiler_frame: &mut profiler::OpenFrame) {
+    fn redraw(
+        &mut self,
+        display: &glium::Display,
+        target: &mut glium::Frame,
+        profiler_frame: &mut profiler::OpenFrame,
+    ) {
         self.current_state.redraw(display, target, profiler_frame)
     }
 }

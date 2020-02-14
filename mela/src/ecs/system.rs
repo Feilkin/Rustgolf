@@ -1,10 +1,16 @@
 //! entity component Systems
 
 use crate::ecs::world::World;
-use std::time::Duration;
-use crate::profiler::Profiler;
 use crate::profiler;
+use crate::profiler::{OpenTagTree, Profiler};
+use std::time::Duration;
 
 pub trait System<W: World> {
-    fn update(&mut self, delta: Duration, world: W) -> W;
+    fn name(&self) -> &'static str;
+    fn update<'f>(
+        &mut self,
+        delta: Duration,
+        world: W,
+        profiler_tag: profiler::OpenTagTree<'f>,
+    ) -> (W, OpenTagTree<'f>);
 }

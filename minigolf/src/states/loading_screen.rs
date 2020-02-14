@@ -10,10 +10,10 @@ use mela::assets::{Image, Spritesheet};
 use mela::game::IoState;
 use mela::gfx;
 use mela::gfx::{Mesh, Quad};
+use mela::profiler::Profiler;
 use mela::state::State;
 use std::fmt::{Debug, Error, Formatter};
 use std::time::Duration;
-use mela::profiler::Profiler;
 
 pub struct LoadingScreen {
     loading_img: Option<Mesh>,
@@ -94,7 +94,12 @@ impl State for LoadingScreen {
         }
     }
 
-    fn redraw(&mut self, display: &glium::Display, target: &mut glium::Frame, _profiler_frame: &mut profiler::OpenFrame) {
+    fn redraw(
+        &mut self,
+        display: &glium::Display,
+        target: &mut glium::Frame,
+        _profiler_frame: &mut profiler::OpenFrame,
+    ) {
         let (width, height) = (800.0, 600.0);
 
         let camera_matrix =

@@ -1,13 +1,13 @@
 use crate::components::physics::{Acceleration, PhysicsEvent, Position, Velocity};
 use mela::ecs::{ComponentStorage, Entity, ReadAccess, RwAccess, System, WriteAccess};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use crate::world::MyWorld;
 use mela::ecs::world::World;
 use mela::nalgebra::Vector2;
 use mela::profiler;
-use mela::profiler::OpenTagTreeRoot;
+use mela::profiler::{OpenTagTreeRoot, PopTag, PushTag};
 
 pub struct MoveSystem {}
 
@@ -27,7 +27,7 @@ impl MoveSystem {
         let velocity = **velocity + half_of_velocity_delta;
         let mut position = **position + velocity * delta.as_secs_f32();
 
-        let (screen_width, screen_height) = (1920., 1080.);
+        let (screen_width, screen_height) = (1920. * 2., 1080. * 2.);
 
         if position.x > screen_width + 8. {
             position.x = -8.
@@ -49,7 +49,16 @@ impl MoveSystem {
 }
 
 impl System<MyWorld> for MoveSystem {
-    fn update(&mut self, delta: Duration, world: MyWorld) -> MyWorld {
+    fn name(&self) -> &'static str {
+        "MoveSystem"
+    }
+
+    fn update<'f>(
+        &mut self,
+        delta: Duration,
+        world: MyWorld,
+        profiler_tag: profiler::OpenTagTree<'f>,
+    ) -> (MyWorld, profiler::OpenTagTree<'f>) {
         let MyWorld {
             entities,
             mut components,
@@ -75,127 +84,178 @@ impl System<MyWorld> for MoveSystem {
             }
         }
 
-        MyWorld {
-            last_physics_update: Instant::now(),
-            entities,
-            components,
-            ..world
-        }
+        (
+            MyWorld {
+                last_physics_update: Instant::now(),
+                entities,
+                components,
+                ..world
+            },
+            profiler_tag,
+        )
     }
 }
 
+struct CollisionObjectData {
+    entity: Entity,
+}
+
+type CollisionWorld = mela::ncollide2d::world::CollisionWorld<f32, CollisionObjectData>;
+
 pub struct CollisionGenerator {
+    world_handle_lookup: HashMap<Entity, mela::ncollide2d::pipeline::CollisionObjectSlabHandle>,
     collision_set: HashSet<(Entity, Entity)>,
+    collision_world: CollisionWorld,
 }
 
 impl CollisionGenerator {
     pub fn new() -> CollisionGenerator {
         CollisionGenerator {
+            world_handle_lookup: HashMap::new(),
             collision_set: HashSet::new(),
+            collision_world: CollisionWorld::new(1.0),
         }
     }
 
-    fn collide_entities(
-        &mut self,
-        delta: Duration,
-        entity: &Entity,
-        position: &Position,
-        velocity: &Velocity,
-        others: &mut dyn Iterator<Item = (Entity, &Position)>,
-    ) -> Vec<PhysicsEvent> {
-        use mela::nalgebra::Isometry2;
-        use mela::ncollide2d::query;
-        use mela::ncollide2d::query::Proximity;
-        use mela::ncollide2d::shape::Ball;
+    fn handle_contact_event(
+        &self,
+        event: &mela::ncollide2d::pipeline::ContactEvent<
+            mela::ncollide2d::pipeline::CollisionObjectSlabHandle,
+        >,
+    ) -> PhysicsEvent {
+        use mela::ncollide2d::pipeline::ContactEvent;
 
-        let mut events = Vec::new();
+        match event {
+            &ContactEvent::Started(cause_handle, other_handle) => {
+                let cause_object = self.collision_world.collision_object(cause_handle).unwrap();
+                let other_object = self.collision_world.collision_object(other_handle).unwrap();
 
-        // TODO: get rid of hard coded bodies
-        let body = Ball::new(8f32);
-        let self_isometry = Isometry2::new(position.coords, 0.);
+                let (_, _, _, contacts) = self.collision_world.contact_pair(cause_handle, other_handle, true).unwrap();
 
-        for (other_entity, other_position) in others {
-            if other_entity == *entity {
-                continue;
-            }
+                let deepest = contacts.deepest_contact().unwrap();
 
-            // avoid creating 2 events for 1 collision
-            if self.collision_set.contains(&(other_entity, *entity)) {
-                continue;
-            }
-
-            let other_body = Ball::new(8f32);
-            let other_isometry = Isometry2::new(other_position.coords, 0.);
-
-            match query::proximity(&self_isometry, &body, &other_isometry, &other_body, 0.) {
-                Proximity::Intersecting => {
-                    // collision, figure where and how
-                    // TODO: figure out how to use prediction?
-                    let contact =
-                        query::contact(&self_isometry, &body, &other_isometry, &other_body, 0.1);
-
-                    if let Some(contact) = contact {
-                        let toi = query::time_of_impact(
-                            &self_isometry,
-                            &velocity,
-                            &body,
-                            &other_isometry,
-                            &Vector2::new(0., 0.), // TODO: use actual speeds here?? idk
-                            &other_body,
-                            delta.as_secs_f32(),
-                            0.,
-                        )
-                        .expect("should collide but didn't??");
-
-                        events.push(PhysicsEvent::Collision {
-                            cause: entity.clone(),
-                            other: other_entity,
-                            contact,
-                            toi: toi.toi,
-                        });
-
-                        self.collision_set.insert((*entity, other_entity));
-                    }
+                PhysicsEvent::Collision {
+                    cause: cause_object.data().entity,
+                    other: other_object.data().entity,
+                    contact: deepest.contact,
+                    toi: 0.0
                 }
-                _ => (), // no collision
+            },
+            &ContactEvent::Stopped(cause_handle, other_handle) => {
+                let cause_object = self.collision_world.collision_object(cause_handle).unwrap();
+                let other_object = self.collision_world.collision_object(other_handle).unwrap();
+
+                PhysicsEvent::CollisionEnded {
+                    cause: cause_object.data().entity,
+                    other: other_object.data().entity,
+                }
+            },
+        }
+    }
+
+    fn rebuild_collision_world(
+        &mut self,
+        positions: &mut dyn Iterator<Item = (Entity, &Position)>,
+    ) {
+        use mela::nalgebra::Isometry2;
+        use mela::ncollide2d::pipeline::CollisionObjectSlabHandle;
+        use mela::ncollide2d::shape::{Ball, ShapeHandle};
+
+        let mut pending_update: HashSet<Entity> =
+            self.world_handle_lookup.keys().cloned().collect();
+
+        for (entity, position) in positions {
+            match self.world_handle_lookup.get(&entity) {
+                Some(handle) => {
+                    let isometry = Isometry2::new(position.coords, 0.);
+
+                    let object = self.collision_world.get_mut(*handle).unwrap();
+                    object.set_position(isometry);
+                }
+                None => {
+                    let shape_handle = ShapeHandle::new(Ball::new(8f32));
+                    let isometry = Isometry2::new(position.coords, 0.);
+
+                    let mut balls_group = mela::ncollide2d::pipeline::CollisionGroups::new();
+                    balls_group.set_membership(&[1]);
+
+                    let query_type =
+                        mela::ncollide2d::pipeline::GeometricQueryType::Contacts(0., 0.);
+
+                    let (handle, _) = self.collision_world.add(
+                        isometry,
+                        shape_handle,
+                        balls_group,
+                        query_type,
+                        CollisionObjectData { entity },
+                    );
+
+                    self.world_handle_lookup.insert(entity, handle);
+                }
             }
+
+            pending_update.remove(&entity);
         }
 
-        events
+        // entities left in pending_update have been removed from the world
+        let to_remove: Vec<CollisionObjectSlabHandle> = pending_update
+            .iter()
+            .map(|e| *self.world_handle_lookup.get(e).unwrap())
+            .collect();
+
+        self.collision_world.remove(&to_remove);
+
+        for entity in pending_update.iter() {
+            self.world_handle_lookup.remove(entity);
+        }
     }
 }
 
 impl System<MyWorld> for CollisionGenerator {
-    fn update(&mut self, delta: Duration, world: MyWorld) -> MyWorld {
+    fn name(&self) -> &'static str {
+        "CollisionGenerator"
+    }
+
+    fn update<'f>(
+        &mut self,
+        delta: Duration,
+        world: MyWorld,
+        mut profiler_tag: profiler::OpenTagTree<'f>,
+    ) -> (MyWorld, profiler::OpenTagTree<'f>) {
         let MyWorld {
             entities,
             mut components,
             ..
         } = world;
 
-        //let mut current_collisions = HashSet::new();
-
         components.physics_events.write().clear();
 
         let mut new_events = Vec::new();
 
-        for entity in &entities {
-            match (
-                components.positions.read().fetch(*entity),
-                components.velocities.read().fetch(*entity),
-            ) {
-                (Some(p), Some(v)) => {
-                    let collisions = self.collide_entities(
-                        delta,
-                        entity,
-                        p,
-                        v,
-                        &mut components.positions.read().iter(),
-                    );
-                    new_events.extend(collisions);
-                }
-                _ => (),
-            }
+        let rebuilder_tag =
+            profiler_tag.push_tag("rebuilding collision world", [0.3, 0.5, 0.2, 1.0]);
+        self.rebuild_collision_world(&mut components.positions.read().iter());
+
+        let mut world_update_tag = rebuilder_tag.pop_tag().push_tag("updating world", [0.3, 0.2, 0.5, 1.0]);
+        {
+            self.collision_world.clear_events();
+
+            let broad_phase_tag = world_update_tag.push_tag("broad phase", [0.8, 0.4, 0.4, 1.0]);
+            self.collision_world.perform_broad_phase();
+            let narrow_phase_tag = broad_phase_tag.pop_tag().push_tag("narrow phase", [0.4, 0.8, 0.4, 1.0]);
+            self.collision_world.perform_narrow_phase();
+
+            world_update_tag = narrow_phase_tag.pop_tag();
+        }
+
+
+
+        let mut generator_tag = world_update_tag
+            .pop_tag()
+            .push_tag("generating collision events", [0.8, 0.8, 0.2, 1.0]);
+
+        for event in self.collision_world.contact_events() {
+            new_events.push(self.handle_contact_event(event));
         }
 
         let mut new_world = MyWorld {
@@ -204,11 +264,17 @@ impl System<MyWorld> for CollisionGenerator {
             ..world
         };
 
+        let pushing_tag = generator_tag
+            .pop_tag()
+            .push_tag("pushing events", [0.2, 0.2, 0.9, 1.0]);
+
         for event in new_events {
             new_world = new_world.add_entity().with_component(event).build()
         }
 
-        new_world
+        profiler_tag = pushing_tag.pop_tag();
+
+        (new_world, profiler_tag)
     }
 }
 
@@ -268,11 +334,11 @@ impl CollisionResolver {
 
                 accelerations.set(
                     cause,
-                    (pos_diff.normalize() * (contact.depth.powi(2) * 50.)).into(),
+                    (pos_diff.normalize() * (contact.depth * 10.)).into(),
                 );
                 accelerations.set(
                     other,
-                    (pos_diff2.normalize() * (contact.depth.powi(2) * 50.)).into(),
+                    (pos_diff2.normalize() * (contact.depth * 10.)).into(),
                 );
             }
             _ => (),
@@ -281,7 +347,16 @@ impl CollisionResolver {
 }
 
 impl System<MyWorld> for CollisionResolver {
-    fn update(&mut self, delta: Duration, world: MyWorld) -> MyWorld {
+    fn name(&self) -> &'static str {
+        "CollisionResolver"
+    }
+
+    fn update<'f>(
+        &mut self,
+        delta: Duration,
+        world: MyWorld,
+        profiler_tag: profiler::OpenTagTree<'f>,
+    ) -> (MyWorld, profiler::OpenTagTree<'f>) {
         let MyWorld {
             mut components,
             mut entities,
@@ -306,10 +381,13 @@ impl System<MyWorld> for CollisionResolver {
                 .expect("tried to kill non-existing entity");
         }
 
-        MyWorld {
-            components,
-            entities,
-            ..world
-        }
+        (
+            MyWorld {
+                components,
+                entities,
+                ..world
+            },
+            profiler_tag,
+        )
     }
 }

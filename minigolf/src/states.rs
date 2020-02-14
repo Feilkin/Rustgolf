@@ -12,12 +12,12 @@ pub mod state_debugger;
 
 pub use loading_screen::LoadingScreen;
 use mela::game::IoState;
+use mela::profiler;
+use mela::profiler::Profiler;
 pub use play_screen::PlayScreen;
 pub use state_debugger::StateDebugger;
 use std::ops::Deref;
 use std::time::Duration;
-use mela::profiler::Profiler;
-use mela::profiler;
 
 #[derive(Debug)]
 pub enum State {
@@ -59,7 +59,7 @@ impl MelaState for State {
         display: &Display,
         ui: &mut mela::imgui::Ui,
         io_state: &IoState,
-        profiler_frame: &mut profiler::OpenFrame
+        profiler_frame: &mut profiler::OpenFrame,
     ) -> State {
         match self {
             State::Loading(s) => s.update(delta, display, ui, io_state, profiler_frame),
@@ -68,7 +68,12 @@ impl MelaState for State {
         }
     }
 
-    fn redraw(&mut self, display: &Display, target: &mut Frame, profiler_frame: &mut profiler::OpenFrame) {
+    fn redraw(
+        &mut self,
+        display: &Display,
+        target: &mut Frame,
+        profiler_frame: &mut profiler::OpenFrame,
+    ) {
         match self {
             State::Loading(s) => s.redraw(display, target, profiler_frame),
             State::Play(s) => s.redraw(display, target, profiler_frame),

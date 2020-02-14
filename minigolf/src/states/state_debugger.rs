@@ -6,11 +6,11 @@ use crate::states::State as GolfState;
 use imgui_glium_renderer::glium::{Display, Frame};
 use imgui_glium_renderer::imgui::Ui;
 use mela::game::IoState;
+use mela::profiler;
 use mela::state::State;
 use std::default::Default;
 use std::fmt::{Debug, Error, Formatter};
 use std::time::Duration;
-use mela::profiler;
 
 #[derive(Default)]
 struct UiState {
@@ -93,7 +93,9 @@ impl State for StateDebugger<GolfState> {
             });
 
         if run_next_frame {
-            let inner = self.inner.update(delta, display, ui, io_state, profiler_frame);
+            let inner = self
+                .inner
+                .update(delta, display, ui, io_state, profiler_frame);
 
             GolfState::StateDebugger(Box::new(StateDebugger { inner, ..self }))
         } else if resume_play {
@@ -103,7 +105,12 @@ impl State for StateDebugger<GolfState> {
         }
     }
 
-    fn redraw(&mut self, display: &Display, target: &mut Frame, profiler_frame: &mut profiler::OpenFrame) {
+    fn redraw(
+        &mut self,
+        display: &Display,
+        target: &mut Frame,
+        profiler_frame: &mut profiler::OpenFrame,
+    ) {
         self.inner.redraw(display, target, profiler_frame)
     }
 

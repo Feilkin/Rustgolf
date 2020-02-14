@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use crate::systems::{physics::*, util::*};
 use crate::world::MyWorld;
 use glium::Surface;
-use mela::profiler::{Profiler, PushTag, PopTag};
+use mela::profiler::{OpenTagTree, OpenTagTreeRoot, PopTag, Profiler, PushTag};
 
 #[derive(Debug, Default)]
 struct UiState {}
@@ -83,14 +83,17 @@ impl State for PlayScreen {
                 ))));
             }
         }
-        let ecs_tag = profiler_frame.push_tag("ECS", [1., 0., 1., 1.]);
+        let mut ecs_tag: OpenTagTree = profiler_frame.push_tag("ECS", [1., 0., 1., 1.]).into();
 
         // TODO: ECS stuff
         let mut systems = self.systems;
         let mut world = self.world;
 
         for system in systems.iter_mut() {
-            world = system.update(delta, world);
+            let system_tag = ecs_tag.push_tag(system.name(), [0.8, 0.3, 0.4, 1.0]);
+            let (w, st) = system.update(delta, world, system_tag.into());
+            ecs_tag = st.pop_tag();
+            world = w;
         }
 
         let MyWorld {
@@ -99,7 +102,7 @@ impl State for PlayScreen {
             ..
         } = world;
 
-        ecs_tag.pop_tag();
+        ecs_tag.into_root().pop_tag();
 
         // player input
         match entities.first() {
@@ -134,16 +137,23 @@ impl State for PlayScreen {
         })
     }
 
-    fn redraw(&mut self, display: &Display, target: &mut Frame, profiler_frame: &mut profiler::OpenFrame) {
+    fn redraw(
+        &mut self,
+        display: &Display,
+        target: &mut Frame,
+        profiler_frame: &mut profiler::OpenFrame,
+    ) {
         let draw_tag = profiler_frame.push_tag("redraw", [1., 0.87, 0.4, 1.]);
 
         let (target_width, target_height) = target.get_dimensions();
-        let (width, height) = (target_width as f32, target_height as f32);
+        let (width, height) = (target_width as f32 * 2., target_height as f32 * 2.);
 
         let camera_matrix =
             nalgebra::Matrix4::new_orthographic(0.0_f32, width, height, 0.0, 0.0, 10.0);
 
         let mut spritebatch = Spritebatch::new(&self.spritesheet);
+
+        let sb_tag = draw_tag.push_tag("sprite batching", [0.2, 0.4, 0.3, 1.0]);
 
         let world = &self.world;
         for entity in &world.entities {
@@ -168,9 +178,11 @@ impl State for PlayScreen {
             }
         }
 
+        let draw_call_tag = sb_tag.pop_tag().push_tag("draw call", [0.3, 0.3, 0.3, 1.]);
+
         spritebatch.draw(camera_matrix, display, target, &self.img_shader);
 
-        draw_tag.pop_tag();
+        draw_call_tag.pop_tag().into_root().pop_tag();
     }
 
     fn update_debug_ui(&mut self, ui: &mut mela::imgui::Ui) {
@@ -266,11 +278,11 @@ impl From<LoadingScreen> for PlayScreen {
 
         let mut world = MyWorld::new();
 
-        for x in 0..35 {
-            for y in 0..20 {
+        for x in 0..45 {
+            for y in 0..25 {
                 world = world
                     .add_entity()
-                    .with_component(Position::new(20. * x as f32 + 8., 20. * y as f32 + 8.))
+                    .with_component(Position::new(40. * x as f32 + 8., 40. * y as f32 + 8.))
                     .with_component(Velocity::new(0., 0.))
                     .with_component(Acceleration::new(0., 0.))
                     .build();

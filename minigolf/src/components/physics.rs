@@ -98,6 +98,10 @@ pub enum PhysicsEvent {
         contact: Contact<f32>,
         toi: f32,
     },
+    CollisionEnded {
+        cause: Entity,
+        other: Entity,
+    }
 }
 
 impl Component for PhysicsEvent {}
