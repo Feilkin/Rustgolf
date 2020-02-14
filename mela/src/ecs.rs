@@ -1,14 +1,5 @@
 //! my own entity component system
 
-pub mod entity;
-pub mod system;
-pub mod world;
-
-pub use entity::Entity;
-pub use system::System;
-
-use crate::ecs::entity::EntityBuilder;
-use crate::ecs::world::World;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::iter::{Enumerate, FilterMap};
@@ -16,6 +7,16 @@ use std::net::Shutdown::Write;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::slice::Iter;
+
+pub use entity::Entity;
+pub use system::System;
+
+use crate::ecs::entity::EntityBuilder;
+use crate::ecs::world::World;
+
+pub mod entity;
+pub mod system;
+pub mod world;
 
 /// An interface for component storages. See `VecStorage` for example implementation
 pub trait ComponentStorage<C: Component> {

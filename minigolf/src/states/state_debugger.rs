@@ -2,15 +2,18 @@
 //!
 //! Allows pausing states, and advancing them in steps.
 
-use crate::states::State as GolfState;
-use imgui_glium_renderer::glium::{Display, Frame};
-use imgui_glium_renderer::imgui::Ui;
-use mela::game::IoState;
-use mela::profiler;
-use mela::state::State;
 use std::default::Default;
 use std::fmt::{Debug, Error, Formatter};
 use std::time::Duration;
+
+use imgui_glium_renderer::glium::{Display, Frame};
+use imgui_glium_renderer::imgui::Ui;
+
+use mela::game::IoState;
+use mela::profiler;
+use mela::state::State;
+
+use crate::states::State as GolfState;
 
 #[derive(Default)]
 struct UiState {

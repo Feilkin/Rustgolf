@@ -1,13 +1,15 @@
 //! Graphics related stuff
 
-use crate::assets::image::Image;
 use glium::implement_vertex;
+pub use glium::texture::Texture2d as Texture;
+
+pub use mesh::Mesh;
+pub use spritebatch::Spritebatch;
+
+use crate::assets::image::Image;
 
 mod mesh;
 mod spritebatch;
-pub use spritebatch::Spritebatch;
-
-pub use glium::texture::Texture2d as Texture;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TextureId(usize);
@@ -23,8 +25,6 @@ impl From<TextureId> for usize {
         id.0
     }
 }
-
-pub use mesh::Mesh;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {

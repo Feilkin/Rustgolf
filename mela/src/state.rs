@@ -1,9 +1,10 @@
 //! Stateful game states manager factory
 
+use std::time::Duration;
+
 use crate::game::IoState;
 use crate::profiler;
 use crate::profiler::Profiler;
-use std::time::Duration;
 
 pub trait State {
     type Wrapper: State + Sized;

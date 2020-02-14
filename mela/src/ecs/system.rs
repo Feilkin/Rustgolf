@@ -1,9 +1,10 @@
 //! entity component Systems
 
+use std::time::Duration;
+
 use crate::ecs::world::World;
 use crate::profiler;
 use crate::profiler::{OpenTagTree, Profiler};
-use std::time::Duration;
 
 pub trait System<W: World> {
     fn name(&self) -> &'static str;

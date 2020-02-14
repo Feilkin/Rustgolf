@@ -1,7 +1,7 @@
 //! World is the container thing
 
 use crate::ecs::{
-    entity::EntityBuilder, Component, ComponentStorage, Entity, ReadAccess, WriteAccess,
+    Component, ComponentStorage, Entity, entity::EntityBuilder, ReadAccess, WriteAccess,
 };
 
 pub trait World: Sized {

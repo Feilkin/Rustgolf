@@ -1,10 +1,12 @@
 //! Entity related stuff
 
-use crate::ecs::world::{World, WorldStorage};
-use crate::ecs::{Component, ComponentStorage, WriteAccess};
-use serde::export::fmt::Error;
-use serde::export::{Formatter, PhantomData};
 use std::ops::Deref;
+
+use serde::export::{Formatter, PhantomData};
+use serde::export::fmt::Error;
+
+use crate::ecs::{Component, ComponentStorage, WriteAccess};
+use crate::ecs::world::{World, WorldStorage};
 
 /// Entities are just very complicated 64 bit numbers
 /// First 52 bits are the unique identity of this entity.

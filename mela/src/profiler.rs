@@ -1,8 +1,9 @@
 //! imgui based frame profiler and stuff
 
-use imgui::Ui;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
+
+use imgui::Ui;
 
 pub trait PushTag: Sized {
     type Child: PopTag;
@@ -79,9 +80,13 @@ impl Profiler {
         let histogram_width = ui.calc_item_width();
         let item_width = histogram_width / frame_times.len() as f32;
 
-        PlotHistogram::new(ui, &im_str!("Frame times (average sampled: {:.3}ms)", average * 1000.), &frame_times)
-            .graph_size([0., 64.])
-            .build();
+        PlotHistogram::new(
+            ui,
+            &im_str!("Frame times (average sampled: {:.3}ms)", average * 1000.),
+            &frame_times,
+        )
+        .graph_size([0., 64.])
+        .build();
 
         // we try to get the hovered manually here, because imgui doesn't support getting the
         // hovered histogram item at the moment, maybe?

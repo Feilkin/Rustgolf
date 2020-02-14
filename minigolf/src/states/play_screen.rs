@@ -1,29 +1,31 @@
-use crate::components::physics::{Acceleration, PhysicsEvent, Velocity};
-use crate::components::{physics::Position, GolfComponents};
-use crate::states::{LoadingScreen, State as GolfState, StateDebugger};
-use imgui_glium_renderer::imgui::Ui;
-use itertools::izip;
-use mela::ecs::entity::EntityBuilder;
-use mela::ecs::world::{World, WorldStorage};
-use mela::ecs::{
-    Component, ComponentStorage, DequeStorage, Entity, ReadAccess, System, VecReader, VecStorage,
-    VecWriter, WriteAccess,
-};
-use mela::game::IoState;
-use mela::gfx::Spritebatch;
-use mela::glium::{Display, Frame, Program};
-use mela::state::State;
-use mela::{glium, nalgebra, profiler};
-use nalgebra::{Point2, Vector2};
 use std::collections::HashSet;
 use std::fmt::{Debug, Error, Formatter};
 use std::net::Shutdown::Write;
 use std::time::{Duration, Instant};
 
+use glium::Surface;
+use imgui_glium_renderer::imgui::Ui;
+use itertools::izip;
+use nalgebra::{Point2, Vector2};
+
+use mela::{glium, nalgebra, profiler};
+use mela::ecs::{
+    Component, ComponentStorage, DequeStorage, Entity, ReadAccess, System, VecReader, VecStorage,
+    VecWriter, WriteAccess,
+};
+use mela::ecs::entity::EntityBuilder;
+use mela::ecs::world::{World, WorldStorage};
+use mela::game::IoState;
+use mela::gfx::Spritebatch;
+use mela::glium::{Display, Frame, Program};
+use mela::profiler::{OpenTagTree, OpenTagTreeRoot, PopTag, Profiler, PushTag};
+use mela::state::State;
+
+use crate::components::{GolfComponents, physics::Position};
+use crate::components::physics::{Acceleration, PhysicsEvent, Velocity};
+use crate::states::{LoadingScreen, State as GolfState, StateDebugger};
 use crate::systems::{physics::*, util::*};
 use crate::world::MyWorld;
-use glium::Surface;
-use mela::profiler::{OpenTagTree, OpenTagTreeRoot, PopTag, Profiler, PushTag};
 
 #[derive(Debug, Default)]
 struct UiState {}
@@ -278,8 +280,8 @@ impl From<LoadingScreen> for PlayScreen {
 
         let mut world = MyWorld::new();
 
-        for x in 0..45 {
-            for y in 0..25 {
+        for x in 0..90 {
+            for y in 0..50 {
                 world = world
                     .add_entity()
                     .with_component(Position::new(40. * x as f32 + 8., 40. * y as f32 + 8.))

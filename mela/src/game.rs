@@ -1,9 +1,11 @@
 //! here we go again
 
-use crate::profiler;
+use std::time::Duration;
+
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::ControlFlow;
-use std::time::Duration;
+
+use crate::profiler;
 
 pub trait Playable: Sized {
     fn update(

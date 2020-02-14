@@ -2,26 +2,27 @@
 
 #![deny(unused_must_use)]
 
+use std::time::{Duration, Instant};
+
 use better_panic;
+use glium::DrawError::InstancesCountMismatch;
+use imgui::{FontConfig, FontSource};
 use imgui_glium_renderer::Renderer as ImguiRenderer;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use replace_with::replace_with_or_abort;
 
 use mela;
 use mela::{glium, glutin, imgui};
+use mela::profiler::Profiler;
+use minigolf::Minigolf;
+
+use crate::states::LoadingScreen;
 
 mod components;
 mod minigolf;
 mod states;
 mod systems;
 mod world;
-
-use crate::states::LoadingScreen;
-use glium::DrawError::InstancesCountMismatch;
-use imgui::{FontConfig, FontSource};
-use mela::profiler::Profiler;
-use minigolf::Minigolf;
-use std::time::{Duration, Instant};
 
 fn main() {
     better_panic::install();

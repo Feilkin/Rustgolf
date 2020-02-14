@@ -1,13 +1,15 @@
 //! Aseprite exported spritesheets (.json + .png)
 
-use crate::assets::{AssetError, Image};
-use crate::gfx::{Quad, Texture};
-use glium::Display;
-use serde::Deserialize;
-use serde_json::Error as JsonError;
 use std::fs::File;
 use std::io::{BufReader, Error as IoError};
 use std::path::{Path, PathBuf};
+
+use glium::Display;
+use serde::Deserialize;
+use serde_json::Error as JsonError;
+
+use crate::assets::{AssetError, Image};
+use crate::gfx::{Quad, Texture};
 
 #[derive(Debug)]
 pub enum SpritesheetError {

@@ -1,8 +1,10 @@
-use crate::world::MyWorld;
+use std::time::Duration;
+
 use mela::ecs::System;
 use mela::profiler;
 use mela::profiler::{PopTag, PushTag};
-use std::time::Duration;
+
+use crate::world::MyWorld;
 
 pub struct FixedInterval<S: System<MyWorld>> {
     inner: S,

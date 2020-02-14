@@ -1,9 +1,10 @@
 //! Mesh stuff
 
-use crate::gfx::{Quad, Texture, Vertex};
 use glium::texture::ResidentTexture;
 use glium::uniform;
 use nalgebra::Matrix4;
+
+use crate::gfx::{Quad, Texture, Vertex};
 
 /// Mesh is a collection of vertices, indices, and a texture
 pub struct Mesh {

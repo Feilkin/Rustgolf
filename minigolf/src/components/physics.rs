@@ -1,9 +1,10 @@
 //! bodies & stuff
 
+use std::ops::Deref;
+
 use mela::ecs::{Component, Entity};
 use mela::nalgebra::{Point2, Vector2};
 use mela::ncollide2d::query::Contact;
-use std::ops::Deref;
 
 #[derive(Debug)]
 pub enum Shape {
@@ -101,7 +102,7 @@ pub enum PhysicsEvent {
     CollisionEnded {
         cause: Entity,
         other: Entity,
-    }
+    },
 }
 
 impl Component for PhysicsEvent {}

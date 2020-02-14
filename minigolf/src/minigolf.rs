@@ -4,20 +4,20 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::Duration;
 
 use glutin::event::{Event, StartCause, WindowEvent};
 use glutin::event_loop::ControlFlow;
-use mela::{glium, glutin, profiler};
 
+use mela::{glium, glutin, profiler};
 use mela;
 use mela::assets::{Asset, Image};
 use mela::game::{IoState, Playable};
+use mela::profiler::{PopTag, Profiler, PushTag};
 use mela::state::State;
 
 use crate::states;
 use crate::states::LoadingScreen;
-use mela::profiler::{PopTag, Profiler, PushTag};
-use std::time::Duration;
 
 pub(crate) struct Minigolf {
     io_state: IoState,

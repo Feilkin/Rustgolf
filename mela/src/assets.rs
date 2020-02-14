@@ -1,10 +1,12 @@
 //! Asset loading and such
 
-pub(crate) mod image;
-pub(crate) mod spritesheet;
+pub use spritesheet::Spritesheet;
 
 pub use crate::assets::image::Image;
-pub use spritesheet::Spritesheet;
+
+pub(crate) mod image;
+pub(crate) mod spritesheet;
+pub mod tilemap;
 
 pub enum Asset {
     Image(Image),

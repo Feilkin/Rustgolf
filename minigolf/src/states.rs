@@ -1,23 +1,22 @@
 //! spröööt :-DD
 
-use mela::glium::{Display, Frame};
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::rc::Rc;
+use std::time::Duration;
 
+pub use loading_screen::LoadingScreen;
+use mela::game::IoState;
+use mela::glium::{Display, Frame};
+use mela::profiler;
+use mela::profiler::Profiler;
 use mela::state::State as MelaState;
+pub use play_screen::PlayScreen;
+pub use state_debugger::StateDebugger;
 
 pub mod loading_screen;
 pub mod play_screen;
 pub mod state_debugger;
-
-pub use loading_screen::LoadingScreen;
-use mela::game::IoState;
-use mela::profiler;
-use mela::profiler::Profiler;
-pub use play_screen::PlayScreen;
-pub use state_debugger::StateDebugger;
-use std::ops::Deref;
-use std::time::Duration;
 
 #[derive(Debug)]
 pub enum State {

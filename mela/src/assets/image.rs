@@ -1,15 +1,15 @@
 //! Mostly a wrapper around image-rs
 
+use std::ffi::c_void;
+use std::fmt::Debug;
 use std::path::Path;
 
 use gl::types::{GLint, GLuint};
+use glium::texture::TextureCreationError;
 use image::{DynamicImage, GenericImageView, ImageError};
 
 use crate::assets::{Asset, AssetError};
 use crate::gfx::{Quad, Texture};
-use glium::texture::TextureCreationError;
-use std::ffi::c_void;
-use std::fmt::Debug;
 
 impl From<ImageError> for AssetError {
     fn from(ie: ImageError) -> AssetError {

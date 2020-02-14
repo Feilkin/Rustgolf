@@ -1,19 +1,21 @@
 //! State for loading :)
 
-use glium::uniforms::UniformsStorage;
-use glium::{uniform, Display, Surface};
-use mela::{glium, nalgebra, profiler};
+use std::fmt::{Debug, Error, Formatter};
+use std::time::Duration;
 
-use crate::states::PlayScreen;
-use crate::states::State as GolfState;
+use glium::{Display, Surface, uniform};
+use glium::uniforms::UniformsStorage;
+
+use mela::{glium, nalgebra, profiler};
 use mela::assets::{Image, Spritesheet};
 use mela::game::IoState;
 use mela::gfx;
 use mela::gfx::{Mesh, Quad};
 use mela::profiler::Profiler;
 use mela::state::State;
-use std::fmt::{Debug, Error, Formatter};
-use std::time::Duration;
+
+use crate::states::PlayScreen;
+use crate::states::State as GolfState;
 
 pub struct LoadingScreen {
     loading_img: Option<Mesh>,

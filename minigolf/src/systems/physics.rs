@@ -1,13 +1,14 @@
-use crate::components::physics::{Acceleration, PhysicsEvent, Position, Velocity};
-use mela::ecs::{ComponentStorage, Entity, ReadAccess, RwAccess, System, WriteAccess};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use crate::world::MyWorld;
+use mela::ecs::{ComponentStorage, Entity, ReadAccess, RwAccess, System, WriteAccess};
 use mela::ecs::world::World;
 use mela::nalgebra::Vector2;
 use mela::profiler;
 use mela::profiler::{OpenTagTreeRoot, PopTag, PushTag};
+
+use crate::components::physics::{Acceleration, PhysicsEvent, Position, Velocity};
+use crate::world::MyWorld;
 
 pub struct MoveSystem {}
 
@@ -130,7 +131,10 @@ impl CollisionGenerator {
                 let cause_object = self.collision_world.collision_object(cause_handle).unwrap();
                 let other_object = self.collision_world.collision_object(other_handle).unwrap();
 
-                let (_, _, _, contacts) = self.collision_world.contact_pair(cause_handle, other_handle, true).unwrap();
+                let (_, _, _, contacts) = self
+                    .collision_world
+                    .contact_pair(cause_handle, other_handle, true)
+                    .unwrap();
 
                 let deepest = contacts.deepest_contact().unwrap();
 
@@ -138,9 +142,9 @@ impl CollisionGenerator {
                     cause: cause_object.data().entity,
                     other: other_object.data().entity,
                     contact: deepest.contact,
-                    toi: 0.0
+                    toi: 0.0,
                 }
-            },
+            }
             &ContactEvent::Stopped(cause_handle, other_handle) => {
                 let cause_object = self.collision_world.collision_object(cause_handle).unwrap();
                 let other_object = self.collision_world.collision_object(other_handle).unwrap();
@@ -149,7 +153,7 @@ impl CollisionGenerator {
                     cause: cause_object.data().entity,
                     other: other_object.data().entity,
                 }
-            },
+            }
         }
     }
 
@@ -236,19 +240,21 @@ impl System<MyWorld> for CollisionGenerator {
             profiler_tag.push_tag("rebuilding collision world", [0.3, 0.5, 0.2, 1.0]);
         self.rebuild_collision_world(&mut components.positions.read().iter());
 
-        let mut world_update_tag = rebuilder_tag.pop_tag().push_tag("updating world", [0.3, 0.2, 0.5, 1.0]);
+        let mut world_update_tag = rebuilder_tag
+            .pop_tag()
+            .push_tag("updating world", [0.3, 0.2, 0.5, 1.0]);
         {
             self.collision_world.clear_events();
 
             let broad_phase_tag = world_update_tag.push_tag("broad phase", [0.8, 0.4, 0.4, 1.0]);
             self.collision_world.perform_broad_phase();
-            let narrow_phase_tag = broad_phase_tag.pop_tag().push_tag("narrow phase", [0.4, 0.8, 0.4, 1.0]);
+            let narrow_phase_tag = broad_phase_tag
+                .pop_tag()
+                .push_tag("narrow phase", [0.4, 0.8, 0.4, 1.0]);
             self.collision_world.perform_narrow_phase();
 
             world_update_tag = narrow_phase_tag.pop_tag();
         }
-
-
 
         let mut generator_tag = world_update_tag
             .pop_tag()
@@ -332,10 +338,7 @@ impl CollisionResolver {
                 velocities.set(cause, new_cause_velocity.into());
                 velocities.set(other, new_other_velocity.into());
 
-                accelerations.set(
-                    cause,
-                    (pos_diff.normalize() * (contact.depth * 10.)).into(),
-                );
+                accelerations.set(cause, (pos_diff.normalize() * (contact.depth * 10.)).into());
                 accelerations.set(
                     other,
                     (pos_diff2.normalize() * (contact.depth * 10.)).into(),

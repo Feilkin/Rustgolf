@@ -1,9 +1,10 @@
 //! Efficient batched sprites
 
-use crate::assets::Spritesheet;
-use crate::gfx::{Quad, Texture, Vertex};
 use glium::uniform;
 use nalgebra::Matrix4;
+
+use crate::assets::Spritesheet;
+use crate::gfx::{Quad, Texture, Vertex};
 
 // TODO: fix typo
 pub struct Spritebatch<'a> {
