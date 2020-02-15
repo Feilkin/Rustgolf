@@ -28,7 +28,7 @@ use crate::systems::{physics::*, util::*};
 use crate::world::MyWorld;
 use imgui_glium_renderer::Renderer;
 use mela::debug::DebugDrawable;
-use mela::assets::tilemap::Tileset;
+use mela::assets::tilemap::{Tileset, Orthogonal, Tilemap};
 
 #[derive(Debug, Default)]
 struct UiState {}
@@ -41,7 +41,7 @@ pub struct PlayScreen {
     systems: Vec<Box<dyn System<MyWorld>>>,
     last_frame_delta: Duration,
     is_debugged: bool,
-    tileset: Tileset,
+    tilemap: Tilemap<Orthogonal>,
 }
 
 impl Debug for PlayScreen {
@@ -199,10 +199,10 @@ impl DebugDrawable for PlayScreen {
         let mut dummy = true;
         ui.show_demo_window(&mut dummy);
 
-        Window::new(im_str!("Tileset"))
+        Window::new(im_str!("Tilemap"))
             .size([300., 300.], Condition::FirstUseEver)
             .build(ui, || {
-                self.tileset.draw_debug_ui(ui, renderer);
+                self.tilemap.draw_debug_ui(ui, renderer);
             });
 
         Window::new(im_str!("Entities"))
@@ -288,7 +288,7 @@ impl DebugDrawable for PlayScreen {
 
 impl From<LoadingScreen> for PlayScreen {
     fn from(l: LoadingScreen) -> Self {
-        let (img_shader, spritesheet, tileset) = l.assets();
+        let (img_shader, spritesheet, tilemap) = l.assets();
 
         let mut world = MyWorld::new();
 
@@ -320,7 +320,7 @@ impl From<LoadingScreen> for PlayScreen {
             world,
             img_shader,
             spritesheet,
-            tileset,
+            tilemap,
         }
     }
 }

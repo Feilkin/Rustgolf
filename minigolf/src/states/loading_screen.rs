@@ -17,13 +17,13 @@ use mela::{glium, nalgebra, profiler};
 use crate::states::PlayScreen;
 use crate::states::State as GolfState;
 use mela::debug::DebugDrawable;
-use mela::assets::tilemap::Tileset;
+use mela::assets::tilemap::{Tilemap, Orthogonal};
 
 pub struct LoadingScreen {
     loading_img: Option<Mesh>,
     img_shader: Option<glium::Program>,
     spritesheet: Option<Spritesheet>,
-    tileset: Option<Tileset>,
+    tilemap: Option<Tilemap<Orthogonal>>,
 }
 
 impl Debug for LoadingScreen {
@@ -39,16 +39,16 @@ impl LoadingScreen {
             loading_img: None,
             img_shader: None,
             spritesheet: None,
-            tileset: None,
+            tilemap: None,
         }
     }
 
     pub fn done_loading(&self) -> bool {
-        self.spritesheet.is_some() && self.tileset.is_some()
+        self.spritesheet.is_some() && self.tilemap.is_some()
     }
 
-    pub fn assets(self) -> (glium::Program, Spritesheet, Tileset) {
-        (self.img_shader.unwrap(), self.spritesheet.unwrap(), self.tileset.unwrap())
+    pub fn assets(self) -> (glium::Program, Spritesheet, Tilemap<Orthogonal>) {
+        (self.img_shader.unwrap(), self.spritesheet.unwrap(), self.tilemap.unwrap())
     }
 }
 
@@ -93,11 +93,11 @@ impl State for LoadingScreen {
             let spritesheet =
                 Spritesheet::from_file("assets/sprites/balls/basic.json", display).unwrap();
 
-            let tileset = Tileset::from_file("assets/maps/basic.tsx", display).unwrap();
+            let tilemap = Tilemap::from_file("assets/maps/debug/01.json", display).unwrap();
 
             GolfState::Loading(LoadingScreen {
                 spritesheet: Some(spritesheet),
-                tileset: Some(tileset),
+                tilemap: Some(tilemap),
                 ..self
             })
         }

@@ -2,8 +2,10 @@
 
 pub use object::{Object, ObjectGroup};
 pub use tileset::Tileset;
+pub use tilemap::{Tilemap, Orthogonal};
 
-mod data;
+pub mod data;
 mod object;
 mod tile;
 mod tileset;
+mod tilemap;

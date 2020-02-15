@@ -6,17 +6,13 @@ use std::path::Path;
 
 use gl::types::{GLint, GLuint};
 use glium::texture::TextureCreationError;
-use image::{DynamicImage, GenericImageView, ImageError};
+use image::{DynamicImage, GenericImageView};
+
+pub use image::ImageError;
 
 use crate::assets::{Asset, AssetError};
 use crate::gfx::{Quad, Texture};
 use std::rc::Rc;
-
-impl From<ImageError> for AssetError {
-    fn from(ie: ImageError) -> AssetError {
-        AssetError::FileNotFound
-    }
-}
 
 impl From<glium::texture::TextureCreationError> for AssetError {
     fn from(tce: TextureCreationError) -> AssetError {

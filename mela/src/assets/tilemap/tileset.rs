@@ -14,6 +14,7 @@ use imgui::Ui;
 use imgui_glium_renderer::Renderer;
 
 pub struct Tileset {
+    first_gid: usize,
     image: Image,
     tiles: Vec<Tile>,
     tile_size: (u32, u32),
@@ -22,15 +23,15 @@ pub struct Tileset {
 }
 
 impl Tileset {
-    pub fn from_file<P: AsRef<Path>>(path: P, display: &Display) -> Result<Tileset, AssetError> {
+    pub fn from_file<P: AsRef<Path>>(path: P, display: &Display, first_gid: usize) -> Result<Tileset, AssetError> {
         let file = File::open(path.as_ref())?;
         let reader = BufReader::new(file);
         let data: data::Tileset = serde_xml_rs::from_reader(reader)?;
 
-        Tileset::from(data, path.as_ref(), display)
+        Tileset::build(data, path.as_ref(), display)
     }
 
-    pub fn from<P: AsRef<Path>>(
+    pub fn build<P: AsRef<Path>>(
         data: data::Tileset,
         path: P,
         display: &Display,
@@ -68,6 +69,7 @@ impl Tileset {
         Ok(Tileset {
             image,
             tiles,
+            first_gid: data.firstgid,
             tile_size: (data.tilewidth, data.tileheight),
             source_size: (data.image.width, data.image.height),
             name: data.name,

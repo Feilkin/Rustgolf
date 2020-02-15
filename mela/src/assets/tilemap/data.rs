@@ -1,9 +1,15 @@
 //! Data type definitions for import
 
 use serde::Deserialize;
+use std::convert::{TryFrom, TryInto};
+use crate::assets::{AssetError};
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
 
 #[derive(Debug, Deserialize)]
 pub struct Tileset {
+    pub firstgid: usize,
     pub version: String,
     pub tiledversion: String,
     pub name: String,
@@ -14,6 +20,59 @@ pub struct Tileset {
     pub columns: usize,
     pub image: Image,
     pub tile: Vec<Tile>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExternalTileset {
+    pub version: String,
+    pub tiledversion: String,
+    pub name: String,
+    pub tilewidth: u32,
+    pub tileheight: u32,
+    pub spacing: u32,
+    pub tilecount: usize,
+    pub columns: usize,
+    pub image: Image,
+    pub tile: Vec<Tile>,
+}
+
+impl ExternalTileset {
+    pub fn into_internal(self, firstgid: usize) -> Tileset {
+        Tileset {
+            firstgid,
+            version: self.version,
+            tiledversion: self.tiledversion,
+            name: self.name,
+            tilewidth: self.tilewidth,
+            tileheight: self.tileheight,
+            spacing: self.spacing,
+            tilecount: self.tilecount,
+            columns: self.columns,
+            image: self.image,
+            tile: self.tile
+        }
+    }
+
+    pub fn with_root_path<P: AsRef<Path>>(self, path: P) -> ExternalTileset {
+        let Image {
+            source,
+            ..
+        } = self.image;
+
+        let image = Image {
+            source: path
+                .as_ref()
+                .join(source)
+                .to_string_lossy()
+                .into_owned(),
+            .. self.image
+        };
+
+        ExternalTileset {
+            image,
+            .. self
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,3 +109,135 @@ pub struct Object {
     width: usize,
     height: usize,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Map {
+    ///	Hex-formatted color (#RRGGBB or #AARRGGBB) (optional)
+    pub backgroundcolor: Option<String>,
+    /// Number of tile rows
+    pub height: usize,
+    /// Length of the side of a hex tile in pixels (hexagonal maps only)
+    pub hexsidelength: Option<usize>,
+    /// Whether the map has infinite dimensions
+    pub infinite: bool,
+    /// Array of Layers
+    pub layers: Vec<Layer>,
+    /// Auto-increments for each layer
+    pub nextlayerid: usize,
+    /// Auto-increments for each placed object
+    pub nextobjectid: usize,
+    /// orthogonal, isometric, staggered or hexagonal
+    pub orientation: MapOrientation,
+    /// Array of Properties
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// right-down (the default), right-up, left-down or left-up (orthogonal maps only)
+    pub renderorder: Option<RenderOrder>,
+    /// x or y (staggered / hexagonal maps only)
+    pub staggeraxis: Option<StaggeredAxis>,
+    /// odd or even (staggered / hexagonal maps only)
+    pub staggerindex: Option<StaggeredIndex>,
+    /// The Tiled version used to save the file
+    pub tiledversion: String,
+    /// Map grid height
+    pub tileheight: usize,
+    /// Array of Tilesets
+    pub tilesets: Vec<MaybeInlinedTilesetOrMaybeExternal>,
+    /// Map grid width
+    pub tilewidth: usize,
+    //pub type: String, //	map (since 1.0)
+    /// The JSON format version
+    pub version: f64,
+    /// Number of tile columns
+    pub width: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum MaybeInlinedTilesetOrMaybeExternal {
+    Inlined(Tileset),
+    External {
+        firstgid: usize,
+        source: String,
+    }
+}
+
+impl MaybeInlinedTilesetOrMaybeExternal {
+    pub fn into_tileset<P: AsRef<Path>>(self, path: P) -> Result<Tileset, AssetError> {
+        use MaybeInlinedTilesetOrMaybeExternal::*;
+
+        match self {
+            Inlined(tileset) => Ok(tileset),
+            External { firstgid, source } => {
+                let source_path = Path::new(&source);
+                let actual_path = path
+                    .as_ref()
+                    .parent()
+                    .unwrap_or(Path::new("."))
+                    .join(source_path);
+                dbg!(&actual_path);
+                let file = File::open(&actual_path)?;
+                let reader = BufReader::new(file);
+                let data: ExternalTileset = serde_xml_rs::from_reader(reader)?;
+
+                Ok(data
+                    .with_root_path(source_path
+                        .parent()
+                        .unwrap_or(Path::new(".")))
+                    .into_internal(firstgid))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all="lowercase")]
+pub enum MapOrientation {
+    Orthogonal,
+    Isometric,
+    Staggered,
+    Hexagonal,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all="kebab-case")]
+pub enum RenderOrder {
+    RightDown,
+    RightUp,
+    LeftDown,
+    LeftUp,
+}
+
+
+#[derive(Debug, Deserialize)]
+pub enum StaggeredAxis {
+    X,
+    Y
+}
+
+#[derive(Debug, Deserialize)]
+pub enum StaggeredIndex {
+    Odd,
+    Even,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Property {
+    name: String,
+    value: PropertyValue,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag="type", content="value")]
+#[serde(rename_all="lowercase")]
+pub enum PropertyValue {
+    String(String),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Color,
+    File,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Layer {}
