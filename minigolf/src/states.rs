@@ -13,6 +13,8 @@ use mela::profiler::Profiler;
 use mela::state::State as MelaState;
 pub use play_screen::PlayScreen;
 pub use state_debugger::StateDebugger;
+use mela::debug::DebugDrawable;
+use imgui_glium_renderer::Renderer;
 
 pub mod loading_screen;
 pub mod play_screen;
@@ -79,12 +81,14 @@ impl MelaState for State {
             State::StateDebugger(s) => s.as_mut().redraw(display, target, profiler_frame),
         }
     }
+}
 
-    fn update_debug_ui(&mut self, ui: &mut mela::imgui::Ui) {
+impl DebugDrawable for State {
+    fn draw_debug_ui(&mut self, ui: &mela::imgui::Ui, renderer: &mut Renderer) {
         match self {
-            State::Loading(s) => s.update_debug_ui(ui),
-            State::Play(s) => s.update_debug_ui(ui),
-            State::StateDebugger(s) => s.update_debug_ui(ui),
+            State::Loading(s) => s.draw_debug_ui(ui, renderer),
+            State::Play(s) => s.draw_debug_ui(ui, renderer),
+            State::StateDebugger(s) => s.draw_debug_ui(ui, renderer),
         }
     }
 }

@@ -3,24 +3,27 @@
 use std::fmt::{Debug, Error, Formatter};
 use std::time::Duration;
 
-use glium::{Display, Surface, uniform};
 use glium::uniforms::UniformsStorage;
+use glium::{uniform, Display, Surface};
 
-use mela::{glium, nalgebra, profiler};
 use mela::assets::{Image, Spritesheet};
 use mela::game::IoState;
 use mela::gfx;
 use mela::gfx::{Mesh, Quad};
 use mela::profiler::Profiler;
 use mela::state::State;
+use mela::{glium, nalgebra, profiler};
 
 use crate::states::PlayScreen;
 use crate::states::State as GolfState;
+use mela::debug::DebugDrawable;
+use mela::assets::tilemap::Tileset;
 
 pub struct LoadingScreen {
     loading_img: Option<Mesh>,
     img_shader: Option<glium::Program>,
     spritesheet: Option<Spritesheet>,
+    tileset: Option<Tileset>,
 }
 
 impl Debug for LoadingScreen {
@@ -36,15 +39,16 @@ impl LoadingScreen {
             loading_img: None,
             img_shader: None,
             spritesheet: None,
+            tileset: None,
         }
     }
 
     pub fn done_loading(&self) -> bool {
-        self.spritesheet.is_some()
+        self.spritesheet.is_some() && self.tileset.is_some()
     }
 
-    pub fn assets(self) -> (glium::Program, Spritesheet) {
-        (self.img_shader.unwrap(), self.spritesheet.unwrap())
+    pub fn assets(self) -> (glium::Program, Spritesheet, Tileset) {
+        (self.img_shader.unwrap(), self.spritesheet.unwrap(), self.tileset.unwrap())
     }
 }
 
@@ -89,8 +93,11 @@ impl State for LoadingScreen {
             let spritesheet =
                 Spritesheet::from_file("assets/sprites/balls/basic.json", display).unwrap();
 
+            let tileset = Tileset::from_file("assets/maps/basic.tsx", display).unwrap();
+
             GolfState::Loading(LoadingScreen {
                 spritesheet: Some(spritesheet),
+                tileset: Some(tileset),
                 ..self
             })
         }
@@ -115,3 +122,5 @@ impl State for LoadingScreen {
         );
     }
 }
+
+impl DebugDrawable for LoadingScreen {}

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use mela::ecs::{ComponentStorage, Entity, ReadAccess, RwAccess, System, WriteAccess};
 use mela::ecs::world::World;
+use mela::ecs::{ComponentStorage, Entity, ReadAccess, RwAccess, System, WriteAccess};
 use mela::nalgebra::Vector2;
 use mela::profiler;
 use mela::profiler::{OpenTagTreeRoot, PopTag, PushTag};

@@ -8,24 +8,27 @@ use imgui_glium_renderer::imgui::Ui;
 use itertools::izip;
 use nalgebra::{Point2, Vector2};
 
-use mela::{glium, nalgebra, profiler};
+use mela::ecs::entity::EntityBuilder;
+use mela::ecs::world::{World, WorldStorage};
 use mela::ecs::{
     Component, ComponentStorage, DequeStorage, Entity, ReadAccess, System, VecReader, VecStorage,
     VecWriter, WriteAccess,
 };
-use mela::ecs::entity::EntityBuilder;
-use mela::ecs::world::{World, WorldStorage};
 use mela::game::IoState;
 use mela::gfx::Spritebatch;
 use mela::glium::{Display, Frame, Program};
 use mela::profiler::{OpenTagTree, OpenTagTreeRoot, PopTag, Profiler, PushTag};
 use mela::state::State;
+use mela::{glium, nalgebra, profiler};
 
-use crate::components::{GolfComponents, physics::Position};
 use crate::components::physics::{Acceleration, PhysicsEvent, Velocity};
+use crate::components::{physics::Position, GolfComponents};
 use crate::states::{LoadingScreen, State as GolfState, StateDebugger};
 use crate::systems::{physics::*, util::*};
 use crate::world::MyWorld;
+use imgui_glium_renderer::Renderer;
+use mela::debug::DebugDrawable;
+use mela::assets::tilemap::Tileset;
 
 #[derive(Debug, Default)]
 struct UiState {}
@@ -38,6 +41,7 @@ pub struct PlayScreen {
     systems: Vec<Box<dyn System<MyWorld>>>,
     last_frame_delta: Duration,
     is_debugged: bool,
+    tileset: Tileset,
 }
 
 impl Debug for PlayScreen {
@@ -186,16 +190,24 @@ impl State for PlayScreen {
 
         draw_call_tag.pop_tag().into_root().pop_tag();
     }
+}
 
-    fn update_debug_ui(&mut self, ui: &mut mela::imgui::Ui) {
+impl DebugDrawable for PlayScreen {
+    fn draw_debug_ui(&mut self, ui: &mela::imgui::Ui, renderer: &mut Renderer) {
         use mela::imgui::*;
 
         let mut dummy = true;
         ui.show_demo_window(&mut dummy);
 
+        Window::new(im_str!("Tileset"))
+            .size([300., 300.], Condition::FirstUseEver)
+            .build(ui, || {
+                self.tileset.draw_debug_ui(ui, renderer);
+            });
+
         Window::new(im_str!("Entities"))
             .size([400., 300.], Condition::FirstUseEver)
-            .build(&ui, || {
+            .build(ui, || {
                 ui.text(im_str!("total count: {}", self.world.entities.len()));
 
                 for entity in &self.world.entities {
@@ -210,7 +222,7 @@ impl State for PlayScreen {
                                 &im_str!("Position##{}", usize::from(entity)),
                                 &mut value,
                             )
-                            .build();
+                                .build();
 
                             self.world
                                 .components
@@ -226,7 +238,7 @@ impl State for PlayScreen {
                                 &im_str!("Velocity##{}", usize::from(entity)),
                                 &mut value,
                             )
-                            .build();
+                                .build();
 
                             self.world
                                 .components
@@ -259,9 +271,9 @@ impl State for PlayScreen {
                                             ui,
                                             &im_str!("Contact##{}", usize::from(entity)),
                                         )
-                                        .build(|| {
-                                            ui.text(im_str!("depth: {}", &contact.depth));
-                                        });
+                                            .build(|| {
+                                                ui.text(im_str!("depth: {}", &contact.depth));
+                                            });
 
                                         ui.text(im_str!("toi:   {}", &toi));
                                     }
@@ -276,7 +288,7 @@ impl State for PlayScreen {
 
 impl From<LoadingScreen> for PlayScreen {
     fn from(l: LoadingScreen) -> Self {
-        let (img_shader, spritesheet) = l.assets();
+        let (img_shader, spritesheet, tileset) = l.assets();
 
         let mut world = MyWorld::new();
 
@@ -308,6 +320,7 @@ impl From<LoadingScreen> for PlayScreen {
             world,
             img_shader,
             spritesheet,
+            tileset,
         }
     }
 }

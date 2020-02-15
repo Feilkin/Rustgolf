@@ -9,15 +9,17 @@ use std::time::Duration;
 use glutin::event::{Event, StartCause, WindowEvent};
 use glutin::event_loop::ControlFlow;
 
-use mela::{glium, glutin, profiler};
 use mela;
 use mela::assets::{Asset, Image};
 use mela::game::{IoState, Playable};
 use mela::profiler::{PopTag, Profiler, PushTag};
 use mela::state::State;
+use mela::{glium, glutin, profiler};
 
 use crate::states;
 use crate::states::LoadingScreen;
+use mela::debug::DebugDrawable;
+use imgui_glium_renderer::Renderer;
 
 pub(crate) struct Minigolf {
     io_state: IoState,
@@ -49,6 +51,7 @@ impl Playable for Minigolf {
         delta: Duration,
         display: &glium::Display,
         ui: &mut mela::imgui::Ui,
+        renderer: &mut Renderer,
         profiler_frame: &mut profiler::OpenFrame,
     ) -> Minigolf {
         let mut next_state =
@@ -57,7 +60,7 @@ impl Playable for Minigolf {
 
         // TODO: move this somewhere
         let debug_ui_tag = profiler_frame.push_tag("debug ui", [0.3, 0.8, 0.3, 1.0]);
-        next_state.update_debug_ui(ui);
+        next_state.draw_debug_ui(ui, renderer);
         let _ = debug_ui_tag.pop_tag();
 
         Minigolf {

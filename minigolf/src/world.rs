@@ -1,11 +1,11 @@
 use std::time::Instant;
 
-use mela::ecs::{DequeStorage, Entity, VecStorage};
 use mela::ecs::entity::EntityBuilder;
 use mela::ecs::world::{World, WorldStorage};
+use mela::ecs::{DequeStorage, Entity, VecStorage};
 
-use crate::components::GolfComponents;
 use crate::components::physics::{Acceleration, PhysicsEvent, Position, Velocity};
+use crate::components::GolfComponents;
 
 pub struct MyWorld {
     pub next_entity_id: usize,

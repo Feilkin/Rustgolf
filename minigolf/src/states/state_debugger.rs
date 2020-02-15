@@ -14,6 +14,8 @@ use mela::profiler;
 use mela::state::State;
 
 use crate::states::State as GolfState;
+use mela::debug::DebugDrawable;
+use imgui_glium_renderer::Renderer;
 
 #[derive(Default)]
 struct UiState {
@@ -116,8 +118,10 @@ impl State for StateDebugger<GolfState> {
     ) {
         self.inner.redraw(display, target, profiler_frame)
     }
+}
 
-    fn update_debug_ui(&mut self, ui: &mut mela::imgui::Ui) {
-        self.inner.update_debug_ui(ui);
+impl<S: State> DebugDrawable for StateDebugger<S> {
+    fn draw_debug_ui(&mut self, ui: &mela::imgui::Ui, renderer: &mut Renderer) {
+        self.inner.draw_debug_ui(ui, renderer);
     }
 }

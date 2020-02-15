@@ -6,6 +6,7 @@ use glium::glutin::event::Event;
 use glium::glutin::event_loop::ControlFlow;
 
 use crate::profiler;
+use imgui_glium_renderer::Renderer;
 
 pub trait Playable: Sized {
     fn update(
@@ -13,6 +14,7 @@ pub trait Playable: Sized {
         delta: Duration,
         display: &glium::Display,
         ui: &mut imgui::Ui,
+        renderer: &mut Renderer,
         profiler_frame: &mut profiler::OpenFrame,
     ) -> Self;
     fn push_event<T>(&mut self, event: &Event<T>) -> Option<ControlFlow>;

@@ -10,6 +10,7 @@ use image::{DynamicImage, GenericImageView, ImageError};
 
 use crate::assets::{Asset, AssetError};
 use crate::gfx::{Quad, Texture};
+use std::rc::Rc;
 
 impl From<ImageError> for AssetError {
     fn from(ie: ImageError) -> AssetError {
@@ -24,9 +25,10 @@ impl From<glium::texture::TextureCreationError> for AssetError {
 }
 
 // TODO: this should probably be a newtype over image::DynamicImage
+#[derive(Clone)]
 pub struct Image {
     inner: DynamicImage,
-    texture: Texture,
+    texture: Rc<Texture>,
     dimensions: (u32, u32),
 }
 
@@ -48,11 +50,11 @@ impl Image {
 
         Ok(Image {
             inner: img,
-            texture,
+            texture: Rc::new(texture),
             dimensions: (width, height),
         })
     }
-    pub fn texture(&self) -> &glium::texture::Texture2d {
+    pub fn texture(&self) -> &Rc<glium::texture::Texture2d> {
         &self.texture
     }
     pub fn width(&self) -> u32 {
@@ -68,6 +70,6 @@ impl Image {
 
 impl From<Image> for Texture {
     fn from(img: Image) -> Self {
-        img.texture
+        Rc::try_unwrap(img.texture).unwrap()
     }
 }

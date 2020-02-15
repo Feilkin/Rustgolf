@@ -12,8 +12,8 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use replace_with::replace_with_or_abort;
 
 use mela;
-use mela::{glium, glutin, imgui};
 use mela::profiler::Profiler;
+use mela::{glium, glutin, imgui};
 use minigolf::Minigolf;
 
 use crate::states::LoadingScreen;
@@ -115,7 +115,7 @@ fn main() {
                 let delta = Instant::now() - last_frame;
                 last_frame = Instant::now();
                 replace_with_or_abort(&mut game, |game| {
-                    game.update(delta, &display, &mut ui, &mut profiler_frame)
+                    game.update(delta, &display, &mut ui, &mut imgui_renderer, &mut profiler_frame)
                 });
 
                 // render game

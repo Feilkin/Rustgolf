@@ -5,8 +5,9 @@ use std::time::Duration;
 use crate::game::IoState;
 use crate::profiler;
 use crate::profiler::Profiler;
+use crate::debug::DebugDrawable;
 
-pub trait State {
+pub trait State: DebugDrawable {
     type Wrapper: State + Sized;
 
     fn name(&self) -> &str;
@@ -27,7 +28,4 @@ pub trait State {
         target: &mut glium::Frame,
         profiler_frame: &mut profiler::OpenFrame,
     );
-
-    //TODO: make this #[cfg(debugger)] or something
-    fn update_debug_ui(&mut self, ui: &mut imgui::Ui) {}
 }
