@@ -7,8 +7,8 @@ use mela::nalgebra::Vector2;
 use mela::profiler;
 use mela::profiler::{OpenTagTreeRoot, PopTag, PushTag};
 
-use crate::components::physics::{Acceleration, PhysicsEvent, Position, Velocity};
 use crate::world::MyWorld;
+use mela::components::physics::{Acceleration, Body, PhysicsEvent, Position, Velocity};
 
 pub struct MoveSystem {}
 
@@ -157,9 +157,10 @@ impl CollisionGenerator {
         }
     }
 
-    fn rebuild_collision_world(
+    fn rebuild_collision_world<'r, B: ReadAccess<'r, Body>>(
         &mut self,
         positions: &mut dyn Iterator<Item = (Entity, &Position)>,
+        bodies: B,
     ) {
         use mela::nalgebra::Isometry2;
         use mela::ncollide2d::pipeline::CollisionObjectSlabHandle;
@@ -169,32 +170,34 @@ impl CollisionGenerator {
             self.world_handle_lookup.keys().cloned().collect();
 
         for (entity, position) in positions {
-            match self.world_handle_lookup.get(&entity) {
-                Some(handle) => {
-                    let isometry = Isometry2::new(position.coords, 0.);
+            if let Some(body) = bodies.fetch(entity) {
+                match self.world_handle_lookup.get(&entity) {
+                    Some(handle) => {
+                        let isometry = Isometry2::new(position.coords, 0.);
 
-                    let object = self.collision_world.get_mut(*handle).unwrap();
-                    object.set_position(isometry);
-                }
-                None => {
-                    let shape_handle = ShapeHandle::new(Ball::new(8f32));
-                    let isometry = Isometry2::new(position.coords, 0.);
+                        let object = self.collision_world.get_mut(*handle).unwrap();
+                        object.set_position(isometry);
+                    }
+                    None => {
+                        let shape_handle = body.shape.clone();
+                        let isometry = Isometry2::new(position.coords, 0.);
 
-                    let mut balls_group = mela::ncollide2d::pipeline::CollisionGroups::new();
-                    balls_group.set_membership(&[1]);
+                        let mut balls_group = mela::ncollide2d::pipeline::CollisionGroups::new();
+                        balls_group.set_membership(&[1]);
 
-                    let query_type =
-                        mela::ncollide2d::pipeline::GeometricQueryType::Contacts(0., 0.);
+                        let query_type =
+                            mela::ncollide2d::pipeline::GeometricQueryType::Contacts(0., 0.);
 
-                    let (handle, _) = self.collision_world.add(
-                        isometry,
-                        shape_handle,
-                        balls_group,
-                        query_type,
-                        CollisionObjectData { entity },
-                    );
+                        let (handle, _) = self.collision_world.add(
+                            isometry,
+                            shape_handle,
+                            balls_group,
+                            query_type,
+                            CollisionObjectData { entity },
+                        );
 
-                    self.world_handle_lookup.insert(entity, handle);
+                        self.world_handle_lookup.insert(entity, handle);
+                    }
                 }
             }
 
@@ -238,7 +241,10 @@ impl System<MyWorld> for CollisionGenerator {
 
         let rebuilder_tag =
             profiler_tag.push_tag("rebuilding collision world", [0.3, 0.5, 0.2, 1.0]);
-        self.rebuild_collision_world(&mut components.positions.read().iter());
+        self.rebuild_collision_world(
+            &mut components.positions.read().iter(),
+            components.physics_bodies.read(),
+        );
 
         let mut world_update_tag = rebuilder_tag
             .pop_tag()
@@ -295,11 +301,13 @@ impl CollisionResolver {
         'r,
         V: RwAccess<'r, Velocity>,
         P: ReadAccess<'r, Position>,
+        B: ReadAccess<'r, Body>,
         A: WriteAccess<'r, Acceleration>,
     >(
         collision: &PhysicsEvent,
         mut velocities: V,
         positions: P,
+        bodies: B,
         mut accelerations: A,
     ) {
         match collision {
@@ -310,43 +318,106 @@ impl CollisionResolver {
                 ..
             } => {
                 let (cause, other) = (*cause, *other);
-                let cause_velocity = **velocities.fetch(cause).unwrap();
-                let other_velocity = **velocities.fetch(other).unwrap();
-                let cause_position = **positions.fetch(cause).unwrap();
-                let other_position = **positions.fetch(other).unwrap();
 
-                let pos_diff = &cause_position - &other_position;
-                let pos_diff2 = -&pos_diff;
+                // they must have bodies because they caused collision
+                let cause_body = bodies.fetch((cause)).unwrap();
+                let other_body = bodies.fetch((other)).unwrap();
 
-                // TODO: implement mass
-                let (cause_mass, other_mass) = (1f32, 1f32);
+                match (cause_body._static, other_body._static) {
+                    (true, true) => {
+                        // TODO: static bodies should probably not be colliding?
+                        //       Can probably be solved with collision whitelists or stuff.
+                    }
+                    (false, false) => {
+                        let cause_velocity = **velocities.fetch(cause).unwrap();
+                        let other_velocity = **velocities.fetch(other).unwrap();
+                        let cause_position = **positions.fetch(cause).unwrap();
+                        let other_position = **positions.fetch(other).unwrap();
 
-                let new_cause_velocity = &cause_velocity
-                    - ((2. * other_mass) / (cause_mass + other_mass))
-                        * ((&cause_velocity - &other_velocity).dot(&pos_diff)
-                            / (pos_diff.norm().powf(2.0)))
-                        * pos_diff
-                        * 0.97;
+                        let pos_diff = &cause_position - &other_position;
+                        let pos_diff2 = -&pos_diff;
 
-                let new_other_velocity = &other_velocity
-                    - ((2. * cause_mass) / (cause_mass + other_mass))
-                        * ((&other_velocity - &cause_velocity).dot(&pos_diff2)
-                            / (pos_diff2.norm().powf(2.0)))
-                        * pos_diff2
-                        * 0.97;
+                        // TODO: implement mass
+                        let (cause_mass, other_mass) = (1f32, 1f32);
 
-                velocities.set(cause, new_cause_velocity.into());
-                velocities.set(other, new_other_velocity.into());
+                        let new_cause_velocity = &cause_velocity
+                            - ((2. * other_mass) / (cause_mass + other_mass))
+                                * ((&cause_velocity - &other_velocity).dot(&pos_diff)
+                                    / (pos_diff.norm().powf(2.0)))
+                                * pos_diff
+                                * 0.97;
 
-                accelerations.set(cause, (pos_diff.normalize() * (contact.depth * 10.)).into());
-                accelerations.set(
-                    other,
-                    (pos_diff2.normalize() * (contact.depth * 10.)).into(),
-                );
+                        let new_other_velocity = &other_velocity
+                            - ((2. * cause_mass) / (cause_mass + other_mass))
+                                * ((&other_velocity - &cause_velocity).dot(&pos_diff2)
+                                    / (pos_diff2.norm().powf(2.0)))
+                                * pos_diff2
+                                * 0.97;
+
+                        velocities.set(cause, new_cause_velocity.into());
+                        velocities.set(other, new_other_velocity.into());
+
+                        accelerations
+                            .set(cause, (pos_diff.normalize() * (contact.depth * 10.)).into());
+                        accelerations.set(
+                            other,
+                            (pos_diff2.normalize() * (contact.depth * 10.)).into(),
+                        );
+                    }
+                    (true, false) => {
+                        let cause_velocity = velocities.fetch(other).unwrap();
+                        let cause_position = positions.fetch(other).unwrap();
+                        let other_position = positions.fetch(cause).unwrap();
+
+                        let new_vel = resolve_dyn_static(
+                            collision,
+                            cause_velocity,
+                            cause_position,
+                            other_body,
+                            other_position,
+                            cause_body,
+                        );
+
+                        velocities.set(other, new_vel);
+                    },
+                    (false, true) => {
+                        let cause_velocity = velocities.fetch(cause).unwrap();
+                        let cause_position = positions.fetch(cause).unwrap();
+                        let other_position = positions.fetch(other).unwrap();
+
+                        let new_vel = resolve_dyn_static(
+                            collision,
+                            cause_velocity,
+                            cause_position,
+                            cause_body,
+                            other_position,
+                            other_body,
+                        );
+
+                        velocities.set(cause, new_vel);
+                    }
+                }
             }
             _ => (),
         }
     }
+}
+
+fn resolve_dyn_static(
+    collision: &PhysicsEvent,
+    cause_velocity: &Velocity,
+    cause_position: &Position,
+    cause_body: &Body,
+    other_position: &Position,
+    other_body: &Body,
+) -> Velocity {
+    let pos_diff = &**cause_position - &**other_position;
+
+    (&**cause_velocity
+        - (cause_velocity.dot(&pos_diff)
+        / (pos_diff.norm().powf(2.0)))
+        * pos_diff
+        * other_body.material.bounciness).into()
 }
 
 impl System<MyWorld> for CollisionResolver {
@@ -371,6 +442,7 @@ impl System<MyWorld> for CollisionResolver {
                 event,
                 components.velocities.write(),
                 components.positions.read(),
+                components.physics_bodies.read(),
                 components.accelerations.write(),
             );
 

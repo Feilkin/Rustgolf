@@ -21,13 +21,13 @@ use mela::profiler::{OpenTagTree, OpenTagTreeRoot, PopTag, Profiler, PushTag};
 use mela::state::State;
 use mela::{glium, nalgebra, profiler};
 
-use crate::components::physics::{Acceleration, PhysicsEvent, Velocity};
-use crate::components::{physics::Position, GolfComponents};
+use crate::components::GolfComponents;
 use crate::states::{LoadingScreen, State as GolfState, StateDebugger};
 use crate::systems::{physics::*, util::*};
 use crate::world::MyWorld;
 use imgui_glium_renderer::Renderer;
 use mela::assets::tilemap::{Orthogonal, Tilemap, Tileset};
+use mela::components::physics::{Acceleration, Body, Material, PhysicsEvent, Position, Velocity};
 use mela::debug::DebugDrawable;
 
 #[derive(Debug, Default)]
@@ -41,7 +41,7 @@ pub struct PlayScreen {
     systems: Vec<Box<dyn System<MyWorld>>>,
     last_frame_delta: Duration,
     is_debugged: bool,
-    tilemap: Tilemap<Orthogonal>,
+    tilemap: Tilemap<Orthogonal, MyWorld>,
 }
 
 impl Debug for PlayScreen {
@@ -297,15 +297,34 @@ impl From<LoadingScreen> for PlayScreen {
 
         let mut world = MyWorld::new();
 
-        for x in 0..45 {
-            for y in 0..25 {
+        let ball_material = Material {
+            friction: 0.3,
+            bounciness: 0.997,
+        };
+
+        use mela::ncollide2d::shape::ShapeHandle;
+        let ball_ball = mela::ncollide2d::shape::Ball::new(8.);
+
+        let ball_body = Body {
+            shape: ShapeHandle::new(ball_ball),
+            material: ball_material,
+            _static: false,
+        };
+
+        for x in 0..5 {
+            for y in 0..5 {
                 world = world
                     .add_entity()
-                    .with_component(Position::new(40. * x as f32 + 8., 40. * y as f32 + 8.))
+                    .with_component(Position::new(40. * x as f32 + 48., 40. * y as f32 + 48.))
                     .with_component(Velocity::new(0., 0.))
                     .with_component(Acceleration::new(0., 0.))
+                    .with_component(ball_body.clone())
                     .build();
             }
+        }
+
+        for l in tilemap.layers() {
+            world = l.add_entities(world);
         }
 
         println!("done setting up world");

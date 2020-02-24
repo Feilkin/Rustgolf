@@ -1,12 +1,14 @@
 //! Data type definitions for import
 
+use crate::assets::tilemap::{layers, tileset};
 use crate::assets::AssetError;
+use crate::components::physics::{Body, Position};
+use crate::ecs::world::{World, WorldStorage};
 use serde::Deserialize;
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use crate::assets::tilemap::{layers, tileset};
 
 #[derive(Debug, Deserialize)]
 pub struct Tileset {
@@ -81,12 +83,12 @@ pub struct Tile {
 
 #[derive(Debug, Deserialize)]
 pub struct ObjectGroup {
-    draworder: DrawOrder,
-    id: usize,
-    object: Vec<Object>,
+    pub draworder: DrawOrder,
+    pub id: usize,
+    pub object: Vec<Object>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum DrawOrder {
     Index,
@@ -94,11 +96,11 @@ pub enum DrawOrder {
 
 #[derive(Debug, Deserialize)]
 pub struct Object {
-    id: usize,
-    x: usize,
-    y: usize,
-    width: usize,
-    height: usize,
+    pub id: usize,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -231,10 +233,13 @@ pub enum Layer {
 }
 
 impl Layer {
-    pub fn into_actual(self, tilesets: &[tileset::Tileset]) -> Box<dyn layers::Layer> {
+    pub fn into_actual<W: World + WorldStorage<Body> + WorldStorage<Position>>(
+        self,
+        tilesets: &[tileset::Tileset],
+    ) -> Box<dyn layers::Layer<W>> {
         match self {
             Layer::TileLayer(layer_data) => Box::new(layer_data.build(tilesets)),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -264,7 +269,8 @@ pub struct TileLayer {
 
 impl TileLayer {
     pub fn build(self, tilesets: &[tileset::Tileset]) -> layers::TileLayer {
-        let data = self.data
+        let data = self
+            .data
             .into_iter()
             .map(|gid| {
                 tilesets
@@ -279,13 +285,8 @@ impl TileLayer {
             data,
             self.id,
             self.name,
-            [
-                self.offsetx as f32,
-                self.offsety as f32,
-            ],
-            (
-                self.width, self.height
-            )
+            [self.offsetx as f32, self.offsety as f32],
+            (self.width, self.height),
         )
     }
 }

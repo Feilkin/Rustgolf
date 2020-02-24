@@ -4,8 +4,8 @@ use mela::ecs::entity::EntityBuilder;
 use mela::ecs::world::{World, WorldStorage};
 use mela::ecs::{DequeStorage, Entity, VecStorage};
 
-use crate::components::physics::{Acceleration, PhysicsEvent, Position, Velocity};
 use crate::components::GolfComponents;
+use mela::components::physics::{Acceleration, Body, PhysicsEvent, Position, Velocity};
 
 pub struct MyWorld {
     pub next_entity_id: usize,
@@ -101,6 +101,18 @@ impl WorldStorage<Acceleration> for MyWorld {
 
     fn mut_storage(&mut self) -> &mut Self::Storage {
         &mut self.components.accelerations
+    }
+}
+
+impl WorldStorage<Body> for MyWorld {
+    type Storage = VecStorage<Body>;
+
+    fn storage(&self) -> &Self::Storage {
+        &self.components.physics_bodies
+    }
+
+    fn mut_storage(&mut self) -> &mut Self::Storage {
+        &mut self.components.physics_bodies
     }
 }
 

@@ -66,8 +66,12 @@ impl Tileset {
         }
 
         for tile in data.tile {
-            tiles[tile.id]
-                .set_object_groups(tile.objectgroup.iter().map(ObjectGroup::from).collect());
+            tiles[tile.id].set_object_groups(
+                tile.objectgroup
+                    .into_iter()
+                    .map(ObjectGroup::from)
+                    .collect(),
+            );
         }
 
         Ok(Tileset {
@@ -95,7 +99,6 @@ impl Tileset {
 
         Some(&self.tiles[id - self.first_gid])
     }
-
 }
 
 impl DebugDrawable for Tileset {

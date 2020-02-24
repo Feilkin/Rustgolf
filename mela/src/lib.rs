@@ -8,6 +8,7 @@ pub use nalgebra;
 pub use ncollide2d;
 
 pub mod assets;
+pub mod components;
 pub mod debug;
 pub mod ecs;
 pub mod game;

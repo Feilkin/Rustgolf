@@ -1,13 +1,19 @@
 //! Tilemap layers
 
 use crate::assets::tilemap::tile::Tile;
+use crate::components::physics::{Body, Material, Position};
+use crate::ecs::world::{World, WorldStorage};
 use crate::gfx::{Mesh, Spritebatch};
 use glium::{Display, Frame, Program};
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Vector2};
+use ncollide2d::shape::{Cuboid, ShapeHandle};
 use std::rc::Rc;
 
-pub trait Layer {
+pub trait Layer<W: World + WorldStorage<Body> + WorldStorage<Position>> {
     fn draw(&self, camera: &Matrix4<f32>, display: &Display, target: &mut Frame, shader: &Program);
+
+    /// Adds all entities defined by this layer to given world
+    fn add_entities(&self, world: W) -> W;
 }
 
 pub struct TileLayer {
@@ -31,12 +37,12 @@ impl TileLayer {
             id,
             name,
             offset,
-            size
+            size,
         }
     }
 }
 
-impl Layer for TileLayer {
+impl<W: World + WorldStorage<Body> + WorldStorage<Position>> Layer<W> for TileLayer {
     fn draw(&self, camera: &Matrix4<f32>, display: &Display, target: &mut Frame, shader: &Program) {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
@@ -56,7 +62,8 @@ impl Layer for TileLayer {
 
                     let index_offset = vertices.len() as u16;
 
-                    let (tile_vertices, tile_indices) = tile.quad().vertices_and_indices(position, tile_size);
+                    let (tile_vertices, tile_indices) =
+                        tile.quad().vertices_and_indices(position, tile_size);
                     vertices.extend_from_slice(&tile_vertices);
                     indices.extend(tile_indices.iter().map(|i| i + index_offset));
                 }
@@ -68,6 +75,55 @@ impl Layer for TileLayer {
             indices,
             Rc::clone(self.data[0].as_ref().unwrap().image().texture()),
         )
-            .draw(camera, display, target, shader);
+        .draw(camera, display, target, shader);
+    }
+
+    fn add_entities(&self, mut world: W) -> W {
+        for row in 0..self.size.1 {
+            for column in 0..self.size.0 {
+                let id = column + row * self.size.0;
+
+                if let Some(tile) = &self.data[id] {
+                    for og in tile.object_groups() {
+                        for obj in og.objects() {
+                            let (half_width, half_height) = (
+                                tile.size()[0] / 2.,
+                                tile.size()[1] / 2.
+                            );
+
+                            let shape = ShapeHandle::new(
+                                Cuboid::new(
+                                    Vector2::new(
+                                        half_width,
+                                        half_height
+                                    )));
+
+                            // TODO: material from properties?
+                            let material = Material {
+                                friction: 0.80,
+                                bounciness: 1.0,
+                            };
+
+                            let tile_body = Body {
+                                shape,
+                                material,
+                                _static: true,
+                            };
+
+                            world = world
+                                .add_entity()
+                                .with_component(Position::new(
+                                    column as f32 * tile.size()[0] + half_width,
+                                    row as f32 * tile.size()[1] + half_height,
+                                ))
+                                .with_component(tile_body)
+                                .build();
+                        }
+                    }
+                }
+            }
+        }
+
+        world
     }
 }

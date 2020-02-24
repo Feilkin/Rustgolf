@@ -1,8 +1,11 @@
 //! Actual tilemap implementation lives here
 
+use crate::assets::tilemap::layers::Layer;
 use crate::assets::tilemap::{data, Tileset};
 use crate::assets::AssetError;
+use crate::components::physics::{Body, Position};
 use crate::debug::DebugDrawable;
+use crate::ecs::world::{World, WorldStorage};
 use glium::Display;
 use imgui::Ui;
 use imgui_glium_renderer::Renderer;
@@ -10,23 +13,25 @@ use itertools::Itertools;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use crate::assets::tilemap::layers::Layer;
 
 pub trait Orientation {
     fn from_data(data: &data::Map) -> Self;
 }
 
-pub struct Tilemap<O: Orientation> {
+pub struct Tilemap<O: Orientation, W: World + WorldStorage<Body>> {
     name: String,
     size: (usize, usize),
     tile_size: (usize, usize),
     tilesets: Vec<Tileset>,
-    layers: Vec<Box<dyn Layer>>,
+    layers: Vec<Box<dyn Layer<W>>>,
     orientation: O,
 }
 
-impl<O: Orientation> Tilemap<O> {
-    pub fn from_file<P: AsRef<Path>>(path: P, display: &Display) -> Result<Tilemap<O>, AssetError> {
+impl<O: Orientation, W: World + WorldStorage<Body> + WorldStorage<Position>> Tilemap<O, W> {
+    pub fn from_file<P: AsRef<Path>>(
+        path: P,
+        display: &Display,
+    ) -> Result<Tilemap<O, W>, AssetError> {
         let file = File::open(path.as_ref())?;
         let reader = BufReader::new(file);
         let data = serde_json::from_reader(reader)?;
@@ -45,7 +50,7 @@ impl<O: Orientation> Tilemap<O> {
         name: String,
         path: P,
         display: &Display,
-    ) -> Result<Tilemap<O>, AssetError> {
+    ) -> Result<Tilemap<O, W>, AssetError> {
         let orientation = O::from_data(&data);
         let tilesets = data
             .tilesets
@@ -57,11 +62,11 @@ impl<O: Orientation> Tilemap<O> {
             })
             .collect::<Result<Vec<Tileset>, AssetError>>()?;
 
-        let layers = data.layers
+        let layers = data
+            .layers
             .into_iter()
             .map(|data| data.into_actual(&tilesets))
             .collect();
-
 
         Ok(Tilemap {
             name,
@@ -73,7 +78,7 @@ impl<O: Orientation> Tilemap<O> {
         })
     }
 
-    pub fn layers(&self) -> &[Box<dyn Layer>] {
+    pub fn layers(&self) -> &[Box<dyn Layer<W>>] {
         &self.layers
     }
 }
@@ -105,7 +110,9 @@ impl DebugDrawable for Orthogonal {
     }
 }
 
-impl<O: Orientation + DebugDrawable> DebugDrawable for Tilemap<O> {
+impl<O: Orientation + DebugDrawable, W: World + WorldStorage<Body>> DebugDrawable
+    for Tilemap<O, W>
+{
     fn draw_debug_ui(&mut self, ui: &Ui, renderer: &mut Renderer) {
         use imgui::*;
 

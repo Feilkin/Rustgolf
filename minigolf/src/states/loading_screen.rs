@@ -16,6 +16,7 @@ use mela::{glium, nalgebra, profiler};
 
 use crate::states::PlayScreen;
 use crate::states::State as GolfState;
+use crate::world::MyWorld;
 use mela::assets::tilemap::{Orthogonal, Tilemap};
 use mela::debug::DebugDrawable;
 use std::rc::Rc;
@@ -24,7 +25,7 @@ pub struct LoadingScreen {
     loading_img: Option<Mesh>,
     img_shader: Option<glium::Program>,
     spritesheet: Option<Spritesheet>,
-    tilemap: Option<Tilemap<Orthogonal>>,
+    tilemap: Option<Tilemap<Orthogonal, MyWorld>>,
 }
 
 impl Debug for LoadingScreen {
@@ -48,7 +49,7 @@ impl LoadingScreen {
         self.spritesheet.is_some() && self.tilemap.is_some()
     }
 
-    pub fn assets(self) -> (glium::Program, Spritesheet, Tilemap<Orthogonal>) {
+    pub fn assets(self) -> (glium::Program, Spritesheet, Tilemap<Orthogonal, MyWorld>) {
         (
             self.img_shader.unwrap(),
             self.spritesheet.unwrap(),
@@ -72,7 +73,8 @@ impl State for LoadingScreen {
                 fragment: include_str!("../../src/shaders/simple_texture.fragment.glsl"),
                 outputs_srgb: true,
             }
-        ).expect("failed to create shader");
+        )
+        .expect("failed to create shader");
 
         dbg!(img_shader.has_srgb_output());
 

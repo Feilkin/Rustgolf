@@ -49,6 +49,10 @@ impl Tile {
     pub fn image(&self) -> &Image {
         &self.source_image
     }
+
+    pub fn size(&self) -> [f32; 2] {
+        self.size
+    }
 }
 
 impl DebugDrawable for Tile {

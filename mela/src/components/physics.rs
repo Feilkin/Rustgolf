@@ -2,9 +2,10 @@
 
 use std::ops::Deref;
 
-use mela::ecs::{Component, Entity};
-use mela::nalgebra::{Point2, Vector2};
-use mela::ncollide2d::query::Contact;
+use crate::ecs::{Component, Entity};
+use crate::nalgebra::{Point2, Vector2};
+use crate::ncollide2d::query::Contact;
+use std::fmt::{Error, Formatter};
 
 #[derive(Debug)]
 pub enum Shape {
@@ -106,3 +107,24 @@ pub enum PhysicsEvent {
 }
 
 impl Component for PhysicsEvent {}
+
+#[derive(Debug, Clone)]
+pub struct Material {
+    pub friction: f32,
+    pub bounciness: f32,
+}
+
+#[derive(Clone)]
+pub struct Body {
+    pub shape: ncollide2d::shape::ShapeHandle<f32>,
+    pub material: Material,
+    pub _static: bool,
+}
+
+impl Component for Body {}
+
+impl std::fmt::Debug for Body {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "Body {{  material: {:?} }}", self.material)
+    }
+}
