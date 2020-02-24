@@ -16,8 +16,9 @@ use mela::{glium, nalgebra, profiler};
 
 use crate::states::PlayScreen;
 use crate::states::State as GolfState;
+use mela::assets::tilemap::{Orthogonal, Tilemap};
 use mela::debug::DebugDrawable;
-use mela::assets::tilemap::{Tilemap, Orthogonal};
+use std::rc::Rc;
 
 pub struct LoadingScreen {
     loading_img: Option<Mesh>,
@@ -48,7 +49,11 @@ impl LoadingScreen {
     }
 
     pub fn assets(self) -> (glium::Program, Spritesheet, Tilemap<Orthogonal>) {
-        (self.img_shader.unwrap(), self.spritesheet.unwrap(), self.tilemap.unwrap())
+        (
+            self.img_shader.unwrap(),
+            self.spritesheet.unwrap(),
+            self.tilemap.unwrap(),
+        )
     }
 }
 
@@ -60,18 +65,27 @@ impl State for LoadingScreen {
     }
 
     fn load(&mut self, display: &Display) {
-        let vertex_shader_src = include_str!("../../src/shaders/simple_texture.vertex.glsl");
-        let fragment_shader_src = include_str!("../../src/shaders/simple_texture.fragment.glsl");
-        let img_shader =
-            glium::Program::from_source(display, vertex_shader_src, fragment_shader_src, None)
-                .unwrap();
+        use glium::program;
+        let img_shader = program!(display,
+            140 => {
+                vertex: include_str!("../../src/shaders/simple_texture.vertex.glsl"),
+                fragment: include_str!("../../src/shaders/simple_texture.fragment.glsl"),
+                outputs_srgb: true,
+            }
+        ).expect("failed to create shader");
+
+        dbg!(img_shader.has_srgb_output());
 
         self.img_shader = Some(img_shader);
 
         let img = Image::from_file("assets/loading.png", display).unwrap();
         let quad = Quad::new([0.0, 0.0], [800., 600.], img.dimensions());
         let (vertices, indices) = quad.vertices_and_indices([0.0, 0.0], [800., 600.]);
-        self.loading_img = Some(Mesh::new(vertices.to_vec(), indices.to_vec(), img.into()));
+        self.loading_img = Some(Mesh::new(
+            vertices.to_vec(),
+            indices.to_vec(),
+            Rc::clone(img.texture()),
+        ));
     }
 
     fn focus(&mut self, display: &glium::Display) {}
@@ -115,7 +129,7 @@ impl State for LoadingScreen {
             nalgebra::Matrix4::new_orthographic(0.0_f32, width, height, 0.0, 0.0, 10.0);
 
         self.loading_img.as_ref().unwrap().draw(
-            camera_matrix,
+            &camera_matrix,
             display,
             target,
             self.img_shader.as_ref().unwrap(),

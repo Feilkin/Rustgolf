@@ -50,7 +50,7 @@ impl Image {
             dimensions: (width, height),
         })
     }
-    pub fn texture(&self) -> &Rc<glium::texture::Texture2d> {
+    pub fn texture(&self) -> &Rc<Texture> {
         &self.texture
     }
     pub fn width(&self) -> u32 {

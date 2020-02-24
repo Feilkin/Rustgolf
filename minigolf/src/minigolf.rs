@@ -18,8 +18,8 @@ use mela::{glium, glutin, profiler};
 
 use crate::states;
 use crate::states::LoadingScreen;
-use mela::debug::DebugDrawable;
 use imgui_glium_renderer::Renderer;
+use mela::debug::DebugDrawable;
 
 pub(crate) struct Minigolf {
     io_state: IoState,

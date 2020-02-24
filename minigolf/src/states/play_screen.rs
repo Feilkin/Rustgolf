@@ -27,8 +27,8 @@ use crate::states::{LoadingScreen, State as GolfState, StateDebugger};
 use crate::systems::{physics::*, util::*};
 use crate::world::MyWorld;
 use imgui_glium_renderer::Renderer;
+use mela::assets::tilemap::{Orthogonal, Tilemap, Tileset};
 use mela::debug::DebugDrawable;
-use mela::assets::tilemap::{Tileset, Orthogonal, Tilemap};
 
 #[derive(Debug, Default)]
 struct UiState {}
@@ -152,10 +152,15 @@ impl State for PlayScreen {
         let draw_tag = profiler_frame.push_tag("redraw", [1., 0.87, 0.4, 1.]);
 
         let (target_width, target_height) = target.get_dimensions();
-        let (width, height) = (target_width as f32 * 2., target_height as f32 * 2.);
+        let (width, height) = (target_width as f32, target_height as f32);
 
         let camera_matrix =
             nalgebra::Matrix4::new_orthographic(0.0_f32, width, height, 0.0, 0.0, 10.0);
+
+        //debug stuff
+        for layer in self.tilemap.layers() {
+            layer.draw(&camera_matrix, display, target, &self.img_shader);
+        }
 
         let mut spritebatch = Spritebatch::new(&self.spritesheet);
 
@@ -222,7 +227,7 @@ impl DebugDrawable for PlayScreen {
                                 &im_str!("Position##{}", usize::from(entity)),
                                 &mut value,
                             )
-                                .build();
+                            .build();
 
                             self.world
                                 .components
@@ -238,7 +243,7 @@ impl DebugDrawable for PlayScreen {
                                 &im_str!("Velocity##{}", usize::from(entity)),
                                 &mut value,
                             )
-                                .build();
+                            .build();
 
                             self.world
                                 .components
@@ -271,9 +276,9 @@ impl DebugDrawable for PlayScreen {
                                             ui,
                                             &im_str!("Contact##{}", usize::from(entity)),
                                         )
-                                            .build(|| {
-                                                ui.text(im_str!("depth: {}", &contact.depth));
-                                            });
+                                        .build(|| {
+                                            ui.text(im_str!("depth: {}", &contact.depth));
+                                        });
 
                                         ui.text(im_str!("toi:   {}", &toi));
                                     }
@@ -292,8 +297,8 @@ impl From<LoadingScreen> for PlayScreen {
 
         let mut world = MyWorld::new();
 
-        for x in 0..90 {
-            for y in 0..50 {
+        for x in 0..45 {
+            for y in 0..25 {
                 world = world
                     .add_entity()
                     .with_component(Position::new(40. * x as f32 + 8., 40. * y as f32 + 8.))

@@ -5,17 +5,18 @@ use glium::uniform;
 use nalgebra::Matrix4;
 
 use crate::gfx::{Quad, Texture, Vertex};
+use std::rc::Rc;
 
 /// Mesh is a collection of vertices, indices, and a texture
 pub struct Mesh {
     vertices: Vec<Vertex>,
     indices: Vec<u16>,
-    texture: Texture,
+    texture: Rc<Texture>,
 }
 
 // constructors
 impl Mesh {
-    pub fn new(vertices: Vec<Vertex>, indices: Vec<u16>, texture: Texture) -> Mesh {
+    pub fn new(vertices: Vec<Vertex>, indices: Vec<u16>, texture: Rc<Texture>) -> Mesh {
         Mesh {
             vertices,
             indices,
@@ -41,7 +42,7 @@ impl Mesh {
 impl Mesh {
     pub fn draw(
         &self,
-        camera: Matrix4<f32>,
+        camera: &Matrix4<f32>,
         display: &glium::Display,
         target: &mut glium::Frame,
         shader: &glium::Program,
@@ -49,7 +50,7 @@ impl Mesh {
         use glium::Surface;
 
         let uniforms = uniform! {
-            matrix: Into::<[[f32; 4]; 4]>::into(camera),
+            matrix: Into::<[[f32; 4]; 4]>::into(camera.clone()),
             tex: self.texture(),
         };
 

@@ -28,7 +28,7 @@ impl MoveSystem {
         let velocity = **velocity + half_of_velocity_delta;
         let mut position = **position + velocity * delta.as_secs_f32();
 
-        let (screen_width, screen_height) = (1920. * 2., 1080. * 2.);
+        let (screen_width, screen_height) = (1920., 1080.);
 
         if position.x > screen_width + 8. {
             position.x = -8.

@@ -1,17 +1,17 @@
 //! Tiled tilesets
 
-use crate::assets::tilemap::{data, ObjectGroup};
 use crate::assets::tilemap::tile::Tile;
+use crate::assets::tilemap::{data, ObjectGroup};
 use crate::assets::{AssetError, Image};
+use crate::debug::DebugDrawable;
 use crate::gfx::Texture;
 use glium::Display;
-use std::path::Path;
-use std::rc::Rc;
-use std::fs::File;
-use std::io::BufReader;
-use crate::debug::DebugDrawable;
 use imgui::Ui;
 use imgui_glium_renderer::Renderer;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+use std::rc::Rc;
 
 pub struct Tileset {
     first_gid: usize,
@@ -23,7 +23,11 @@ pub struct Tileset {
 }
 
 impl Tileset {
-    pub fn from_file<P: AsRef<Path>>(path: P, display: &Display, first_gid: usize) -> Result<Tileset, AssetError> {
+    pub fn from_file<P: AsRef<Path>>(
+        path: P,
+        display: &Display,
+        first_gid: usize,
+    ) -> Result<Tileset, AssetError> {
         let file = File::open(path.as_ref())?;
         let reader = BufReader::new(file);
         let data: data::Tileset = serde_xml_rs::from_reader(reader)?;
@@ -36,10 +40,13 @@ impl Tileset {
         path: P,
         display: &Display,
     ) -> Result<Tileset, AssetError> {
-        let image = Image::from_file(path
-                                         .as_ref()
-                                         .parent().unwrap_or(Path::new("."))
-                                         .join(data.image.source), display)?;
+        let image = Image::from_file(
+            path.as_ref()
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join(data.image.source),
+            display,
+        )?;
         let mut tiles = Vec::with_capacity(data.tilecount);
 
         let columns = data.columns;
@@ -60,10 +67,7 @@ impl Tileset {
 
         for tile in data.tile {
             tiles[tile.id]
-                .set_object_groups(tile.objectgroup
-                    .iter()
-                    .map(ObjectGroup::from)
-                    .collect());
+                .set_object_groups(tile.objectgroup.iter().map(ObjectGroup::from).collect());
         }
 
         Ok(Tileset {
@@ -79,6 +83,19 @@ impl Tileset {
     pub fn tile(&self, id: usize) -> &Tile {
         &self.tiles[id]
     }
+
+    pub fn tile_gid(&self, id: usize) -> Option<&Tile> {
+        if id < self.first_gid {
+            return None;
+        }
+
+        if id > self.first_gid + self.tiles.len() {
+            return None;
+        }
+
+        Some(&self.tiles[id - self.first_gid])
+    }
+
 }
 
 impl DebugDrawable for Tileset {

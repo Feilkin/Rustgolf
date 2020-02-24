@@ -1,11 +1,12 @@
 //! Importer for Tiled JSON tilemaps
 
 pub use object::{Object, ObjectGroup};
+pub use tilemap::{Orthogonal, Tilemap};
 pub use tileset::Tileset;
-pub use tilemap::{Tilemap, Orthogonal};
 
 pub mod data;
+pub mod layers;
 mod object;
 mod tile;
-mod tileset;
 mod tilemap;
+mod tileset;

@@ -2,10 +2,10 @@
 
 use std::time::Duration;
 
+use crate::debug::DebugDrawable;
 use crate::game::IoState;
 use crate::profiler;
 use crate::profiler::Profiler;
-use crate::debug::DebugDrawable;
 
 pub trait State: DebugDrawable {
     type Wrapper: State + Sized;

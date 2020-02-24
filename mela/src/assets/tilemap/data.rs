@@ -1,11 +1,12 @@
 //! Data type definitions for import
 
+use crate::assets::AssetError;
 use serde::Deserialize;
 use std::convert::{TryFrom, TryInto};
-use crate::assets::{AssetError};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use crate::assets::tilemap::{layers, tileset};
 
 #[derive(Debug, Deserialize)]
 pub struct Tileset {
@@ -49,29 +50,19 @@ impl ExternalTileset {
             tilecount: self.tilecount,
             columns: self.columns,
             image: self.image,
-            tile: self.tile
+            tile: self.tile,
         }
     }
 
     pub fn with_root_path<P: AsRef<Path>>(self, path: P) -> ExternalTileset {
-        let Image {
-            source,
-            ..
-        } = self.image;
+        let Image { source, .. } = self.image;
 
         let image = Image {
-            source: path
-                .as_ref()
-                .join(source)
-                .to_string_lossy()
-                .into_owned(),
-            .. self.image
+            source: path.as_ref().join(source).to_string_lossy().into_owned(),
+            ..self.image
         };
 
-        ExternalTileset {
-            image,
-            .. self
-        }
+        ExternalTileset { image, ..self }
     }
 }
 
@@ -96,7 +87,7 @@ pub struct ObjectGroup {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all="lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum DrawOrder {
     Index,
 }
@@ -156,10 +147,7 @@ pub struct Map {
 #[serde(untagged)]
 pub enum MaybeInlinedTilesetOrMaybeExternal {
     Inlined(Tileset),
-    External {
-        firstgid: usize,
-        source: String,
-    }
+    External { firstgid: usize, source: String },
 }
 
 impl MaybeInlinedTilesetOrMaybeExternal {
@@ -181,9 +169,7 @@ impl MaybeInlinedTilesetOrMaybeExternal {
                 let data: ExternalTileset = serde_xml_rs::from_reader(reader)?;
 
                 Ok(data
-                    .with_root_path(source_path
-                        .parent()
-                        .unwrap_or(Path::new(".")))
+                    .with_root_path(source_path.parent().unwrap_or(Path::new(".")))
                     .into_internal(firstgid))
             }
         }
@@ -191,7 +177,7 @@ impl MaybeInlinedTilesetOrMaybeExternal {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(rename_all="lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum MapOrientation {
     Orthogonal,
     Isometric,
@@ -200,7 +186,7 @@ pub enum MapOrientation {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all="kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RenderOrder {
     RightDown,
     RightUp,
@@ -208,11 +194,10 @@ pub enum RenderOrder {
     LeftUp,
 }
 
-
 #[derive(Debug, Deserialize)]
 pub enum StaggeredAxis {
     X,
-    Y
+    Y,
 }
 
 #[derive(Debug, Deserialize)]
@@ -228,8 +213,8 @@ pub struct Property {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(tag="type", content="value")]
-#[serde(rename_all="lowercase")]
+#[serde(tag = "type", content = "value")]
+#[serde(rename_all = "lowercase")]
 pub enum PropertyValue {
     String(String),
     Int(i64),
@@ -240,4 +225,74 @@ pub enum PropertyValue {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Layer {}
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum Layer {
+    TileLayer(TileLayer),
+}
+
+impl Layer {
+    pub fn into_actual(self, tilesets: &[tileset::Tileset]) -> Box<dyn layers::Layer> {
+        match self {
+            Layer::TileLayer(layer_data) => Box::new(layer_data.build(tilesets)),
+            _ => unimplemented!()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TileLayer {
+    // TODO: chunks
+    // TODO: compression and encoding
+    //       for now we only support data as JSON array, because the documentation for the JSON
+    //       format makes absolutely no sense for compression and encoding fields, so we just ignore
+    //       those and assume the data is not encoded
+    data: Vec<usize>,
+    height: usize,
+    id: usize,
+    name: String,
+    #[serde(default)]
+    offsetx: usize,
+    #[serde(default)]
+    offsety: usize,
+    #[serde(default)]
+    properties: Vec<Property>,
+    startx: Option<isize>,
+    starty: Option<isize>,
+    visible: bool,
+    width: usize,
+}
+
+impl TileLayer {
+    pub fn build(self, tilesets: &[tileset::Tileset]) -> layers::TileLayer {
+        let data = self.data
+            .into_iter()
+            .map(|gid| {
+                tilesets
+                    .iter()
+                    .filter_map(|ts| ts.tile_gid(gid))
+                    .next()
+                    .and_then(|tile| Some(tile.to_owned()))
+            })
+            .collect();
+
+        layers::TileLayer::new(
+            data,
+            self.id,
+            self.name,
+            [
+                self.offsetx as f32,
+                self.offsety as f32,
+            ],
+            (
+                self.width, self.height
+            )
+        )
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Compression {
+    Zlib,
+    Gzip,
+}

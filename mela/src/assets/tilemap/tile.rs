@@ -1,13 +1,14 @@
 //! Tile
 
 use crate::assets::tilemap::{data, ObjectGroup, Tileset};
-use crate::debug::DebugDrawable;
-use imgui::{Ui, TextureId};
-use crate::gfx::Quad;
-use std::rc::Rc;
 use crate::assets::Image;
+use crate::debug::DebugDrawable;
+use crate::gfx::Quad;
+use imgui::{TextureId, Ui};
 use imgui_glium_renderer::Renderer;
+use std::rc::Rc;
 
+#[derive(Clone)]
 pub struct Tile {
     id: usize,
     object_groups: Vec<ObjectGroup>,
@@ -41,8 +42,12 @@ impl Tile {
         &self.object_groups
     }
 
-    pub fn quad(&self, source_dimensions: (u32, u32)) -> Quad {
-        Quad::new(self.position, self.size, source_dimensions)
+    pub fn quad(&self) -> Quad {
+        Quad::new(self.position, self.size, self.source_image.dimensions())
+    }
+
+    pub fn image(&self) -> &Image {
+        &self.source_image
     }
 }
 
@@ -53,9 +58,11 @@ impl DebugDrawable for Tile {
         ui.text(im_str!("Tile [{}]", self.id));
 
         if self.debug_texture_id.is_none() {
-            self.debug_texture_id = Some(renderer
-                .textures()
-                .insert(Rc::clone(self.source_image.texture())));
+            self.debug_texture_id = Some(
+                renderer
+                    .textures()
+                    .insert(Rc::clone(self.source_image.texture().into())),
+            );
         }
 
         Image::new(self.debug_texture_id.unwrap(), self.size)

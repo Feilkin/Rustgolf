@@ -5,7 +5,9 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::time::Duration;
 
+use imgui_glium_renderer::Renderer;
 pub use loading_screen::LoadingScreen;
+use mela::debug::DebugDrawable;
 use mela::game::IoState;
 use mela::glium::{Display, Frame};
 use mela::profiler;
@@ -13,8 +15,6 @@ use mela::profiler::Profiler;
 use mela::state::State as MelaState;
 pub use play_screen::PlayScreen;
 pub use state_debugger::StateDebugger;
-use mela::debug::DebugDrawable;
-use imgui_glium_renderer::Renderer;
 
 pub mod loading_screen;
 pub mod play_screen;

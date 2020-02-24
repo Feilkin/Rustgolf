@@ -1,15 +1,16 @@
 //! Actual tilemap implementation lives here
 
-use crate::assets::tilemap::{Tileset, data};
+use crate::assets::tilemap::{data, Tileset};
+use crate::assets::AssetError;
 use crate::debug::DebugDrawable;
-use imgui_glium_renderer::Renderer;
-use imgui::Ui;
 use glium::Display;
-use std::path::Path;
-use std::fs::File;
-use crate::assets::{AssetError};
-use std::io::BufReader;
+use imgui::Ui;
+use imgui_glium_renderer::Renderer;
 use itertools::Itertools;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+use crate::assets::tilemap::layers::Layer;
 
 pub trait Orientation {
     fn from_data(data: &data::Map) -> Self;
@@ -20,6 +21,7 @@ pub struct Tilemap<O: Orientation> {
     size: (usize, usize),
     tile_size: (usize, usize),
     tilesets: Vec<Tileset>,
+    layers: Vec<Box<dyn Layer>>,
     orientation: O,
 }
 
@@ -38,29 +40,45 @@ impl<O: Orientation> Tilemap<O> {
         Tilemap::from_data(data, name, path, display)
     }
 
-    pub fn from_data<P: AsRef<Path>>(data: data::Map, name: String, path: P, display: &Display) -> Result<Tilemap<O>, AssetError> {
+    pub fn from_data<P: AsRef<Path>>(
+        data: data::Map,
+        name: String,
+        path: P,
+        display: &Display,
+    ) -> Result<Tilemap<O>, AssetError> {
         let orientation = O::from_data(&data);
-        let tilesets = data.tilesets
+        let tilesets = data
+            .tilesets
             .into_iter()
-            .map(|inlined_or_external|
-                     inlined_or_external
-                         .into_tileset(path.as_ref())
-                         .and_then(|data|
-                             Tileset::build(data, path.as_ref(), display)))
+            .map(|inlined_or_external| {
+                inlined_or_external
+                    .into_tileset(path.as_ref())
+                    .and_then(|data| Tileset::build(data, path.as_ref(), display))
+            })
             .collect::<Result<Vec<Tileset>, AssetError>>()?;
+
+        let layers = data.layers
+            .into_iter()
+            .map(|data| data.into_actual(&tilesets))
+            .collect();
+
 
         Ok(Tilemap {
             name,
             orientation,
             tilesets,
+            layers,
             size: (data.width, data.height),
             tile_size: (data.tilewidth, data.tileheight),
         })
     }
+
+    pub fn layers(&self) -> &[Box<dyn Layer>] {
+        &self.layers
+    }
 }
 
 // Tilemap orientations
-
 
 pub struct Orthogonal {
     render_order: data::RenderOrder,

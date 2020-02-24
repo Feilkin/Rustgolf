@@ -45,7 +45,7 @@ impl From<image::ImageError> for AssetError {
     fn from(ie: image::ImageError) -> AssetError {
         match ie {
             image::ImageError::IoError(err) => err.into(),
-            _ => AssetError::ImageError(ie)
+            _ => AssetError::ImageError(ie),
         }
     }
 }

@@ -14,8 +14,8 @@ use mela::profiler;
 use mela::state::State;
 
 use crate::states::State as GolfState;
-use mela::debug::DebugDrawable;
 use imgui_glium_renderer::Renderer;
+use mela::debug::DebugDrawable;
 
 #[derive(Default)]
 struct UiState {
