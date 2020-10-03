@@ -2,16 +2,20 @@ use std::time::Instant;
 
 use mela::ecs::entity::EntityBuilder;
 use mela::ecs::world::{World, WorldStorage};
-use mela::ecs::{DequeStorage, Entity, VecStorage};
-
-use crate::components::GolfComponents;
-use mela::components::physics::{Acceleration, Body, PhysicsEvent, Position, Velocity};
+use mela::ecs::{DequeStorage, Entity, VecStorage, Component};
+use mela::ecs::system::physics::PhysicsWorld;
+use crate::components::Components;
+use mela::nphysics::math::Vector;
+use std::collections::HashMap;
+use std::any::{TypeId, Any};
+use std::fmt::Debug;
+use std::cell::RefCell;
 
 pub struct MyWorld {
     pub next_entity_id: usize,
     pub entities: Vec<Entity>,
-    pub components: GolfComponents,
-    pub last_physics_update: Instant,
+    pub components: RefCell<HashMap<TypeId, RefCell<Box<dyn Any>>>>,
+    pub physics_world: PhysicsWorld<f32>,
 }
 
 impl MyWorld {
@@ -19,8 +23,8 @@ impl MyWorld {
         MyWorld {
             next_entity_id: 0,
             entities: Vec::new(),
-            components: GolfComponents::default(),
-            last_physics_update: Instant::now(),
+            components: RefCell::new(HashMap::default()),
+            physics_world: PhysicsWorld::new(Vector::new(0., 0.))
         }
     }
 }
@@ -67,63 +71,17 @@ impl World for MyWorld {
     }
 }
 
-// TODO: get rid of these
-impl WorldStorage<Position> for MyWorld {
-    type Storage = VecStorage<Position>;
+impl<C: Component + Any + Debug> WorldStorage<C> for MyWorld {
+    type Storage = VecStorage<C>;
 
-    fn storage(&self) -> &Self::Storage {
-        &self.components.positions
-    }
+    fn storage<'s, 'w: 's>(&'w self) -> &'s Self::Storage {
+        let mut components = self.components.borrow_mut();
 
-    fn mut_storage(&mut self) -> &mut Self::Storage {
-        &mut self.components.positions
-    }
-}
-
-impl WorldStorage<Velocity> for MyWorld {
-    type Storage = VecStorage<Velocity>;
-
-    fn storage(&self) -> &Self::Storage {
-        &self.components.velocities
-    }
-
-    fn mut_storage(&mut self) -> &mut Self::Storage {
-        &mut self.components.velocities
-    }
-}
-
-impl WorldStorage<Acceleration> for MyWorld {
-    type Storage = VecStorage<Acceleration>;
-
-    fn storage(&self) -> &Self::Storage {
-        &self.components.accelerations
-    }
-
-    fn mut_storage(&mut self) -> &mut Self::Storage {
-        &mut self.components.accelerations
-    }
-}
-
-impl WorldStorage<Body> for MyWorld {
-    type Storage = VecStorage<Body>;
-
-    fn storage(&self) -> &Self::Storage {
-        &self.components.physics_bodies
-    }
-
-    fn mut_storage(&mut self) -> &mut Self::Storage {
-        &mut self.components.physics_bodies
-    }
-}
-
-impl WorldStorage<PhysicsEvent> for MyWorld {
-    type Storage = DequeStorage<PhysicsEvent>;
-
-    fn storage(&self) -> &Self::Storage {
-        &self.components.physics_events
-    }
-
-    fn mut_storage(&mut self) -> &mut Self::Storage {
-        &mut self.components.physics_events
+        let entry = components
+            .entry(TypeId::of::<C>())
+            .or_insert_with(|| RefCell::new(Box::new(VecStorage::<C>::default()) as Box<dyn Any>))
+            .borrow_mut()
+            .downcast_ref()
+            .unwrap()
     }
 }
