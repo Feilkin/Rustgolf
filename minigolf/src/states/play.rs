@@ -12,6 +12,10 @@ use mela::ecs::system::SystemCaller;
 use crate::physics::{BallComponent, PhysicsAnimator};
 use mela::ecs::component::Transform;
 use std::rc::Rc;
+use mela::gfx::primitives::PrimitiveComponent;
+use mela::ecs::world::World;
+use mela::lyon;
+use mela::nphysics::ncollide2d::na::Isometry2;
 
 pub struct Play {
     world: MyWorld,
@@ -22,13 +26,28 @@ impl Play {
     pub fn new() -> Play {
         let snapshots = Rc::new(RefCell::new(Vec::new()));
 
+        let circle = || {
+            let mut builder = mela::lyon::path::Path::builder();
+            builder.arc(lyon::math::Point::new(0.5, 0.5), lyon::math::Vector::new(0.5, 0.5), lyon::math::Angle::two_pi(), lyon::math::Angle::zero());
+            builder.build()
+        };
+
         Play {
             world: MyWorld::new()
                 .register::<BallComponent>()
-                .register::<Transform<f64>>(),
+                .register::<Transform<f64>>()
+                .register::<PrimitiveComponent>()
+                .add_entity()
+                .with_component(PrimitiveComponent {
+                    color: [1., 1., 1., 1.],
+                    shape: circle()
+                })
+                .with_component(Transform(Isometry2::translation(0., 0.)))
+                .build(),
 
             systems: vec![
-                Box::new(PhysicsAnimator::<f64>::new(Rc::clone(&snapshots))) as Box<dyn SystemCaller<MyWorld>>
+                Box::new(PhysicsAnimator::<f64>::new(Rc::clone(&snapshots))) as Box<dyn SystemCaller<MyWorld>>,
+                Box::new(mela::gfx::primitives::PrimitiveRenderer::new())
             ]
         }
     }
@@ -52,6 +71,8 @@ impl State for Play {
     }
 
     fn redraw(&self, render_ctx: &mut RenderContext, debug_ctx: &mut DebugContext) {
-        ()
+        for system in &self.systems {
+            system.render(render_ctx);
+        }
     }
 }
