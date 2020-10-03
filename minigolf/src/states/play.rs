@@ -9,13 +9,13 @@ use mela::game::IoState;
 use std::time::Duration;
 use mela::debug::{DebugContext, DebugDrawable};
 use mela::ecs::system::SystemCaller;
-use crate::physics::{BallComponent, PhysicsAnimator};
+use crate::physics::{BallComponent, PhysicsAnimator, Snapshot, PhysicsBody, Ball};
 use mela::ecs::component::Transform;
 use std::rc::Rc;
 use mela::gfx::primitives::PrimitiveComponent;
 use mela::ecs::world::World;
 use mela::lyon;
-use mela::nphysics::ncollide2d::na::Isometry2;
+use mela::nphysics::ncollide2d::na::{Isometry2, Point2, Vector2};
 
 pub struct Play {
     world: MyWorld,
@@ -24,7 +24,42 @@ pub struct Play {
 
 impl Play {
     pub fn new() -> Play {
-        let snapshots = Rc::new(RefCell::new(Vec::new()));
+        let mut snapshots = Vec::new();
+
+        let mut seed = Snapshot {
+            start_time: Duration::new(0, 0),
+            end_time: Duration::new(u64::MAX, 999_999_999),
+            balls: vec![
+                PhysicsBody {
+                    body: Ball {
+                        radius: 21.335,
+                    },
+                    position: Point2::new(300., 100.),
+                    velocity: Vector2::new(10., 0.),
+                    acceleration: Vector2::new(10., 0.),
+                },
+                PhysicsBody {
+                    body: Ball {
+                        radius: 21.335,
+                    },
+                    position: Point2::new(600., 100.),
+                    velocity: Vector2::new(-10., 0.),
+                    acceleration: Vector2::new(-10., 0.),
+                }
+            ]
+        };
+
+        seed.next_snapshot();
+        snapshots.push(seed.clone());
+
+        while let Some(next) = seed.next_snapshot() {
+            snapshots.push(next.clone());
+            seed = next;
+        }
+
+        println!("First collision: {:.2}s", snapshots.first().unwrap().end_time.as_secs_f64());
+
+        let snapshots = Rc::new(RefCell::new(snapshots));
 
         let circle = || {
             let mut builder = mela::lyon::path::Path::builder();
@@ -43,6 +78,20 @@ impl Play {
                     shape: circle()
                 })
                 .with_component(Transform(Isometry2::translation(0., 0.)))
+                .with_component(BallComponent {
+                    index: 0,
+                    hidden: false
+                })
+                .add_entity()
+                .with_component(PrimitiveComponent {
+                    color: [1., 1., 1., 1.],
+                    shape: circle()
+                })
+                .with_component(Transform(Isometry2::translation(0., 0.)))
+                .with_component(BallComponent {
+                    index: 1,
+                    hidden: false
+                })
                 .build(),
 
             systems: vec![

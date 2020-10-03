@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 mela = { path = "../../mela", features = ["2d"] }
+num = "0.3.0"
