@@ -28,8 +28,9 @@ impl MyWorld {
         }
     }
 
-    pub fn register<C: Component + Any + Debug>(&mut self) -> () {
+    pub fn register<C: Component + Any + Debug>(mut self) -> MyWorld {
         self.components.insert(TypeId::of::<C>(), Box::new(VecStorage::<C>::new()));
+        self
     }
 }
 

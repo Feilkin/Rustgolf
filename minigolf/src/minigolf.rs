@@ -14,17 +14,17 @@ use mela::debug::{DebugDrawable, DebugContext};
 use mela::winit::event::{Event, WindowEvent, MouseButton, ElementState};
 use mela::winit::event_loop::ControlFlow;
 use mela::gfx::RenderContext;
-use crate::states::Loading;
+use crate::states::Play;
 
 pub(crate) struct Minigolf {
-    state: Loading,
+    state: Play,
     io_state: IoState,
 }
 
 impl Minigolf {
     pub fn new() -> Minigolf {
         Minigolf {
-            state: Loading::new(),
+            state: Play::new(),
             io_state: Default::default(),
         }
     }

@@ -1,5 +1,6 @@
 //! My mini golf game all rights reserved
 
+#![feature(generic_associated_types)]
 #![deny(unused_must_use)]
 
 use std::time::{Duration, Instant};
@@ -14,6 +15,7 @@ mod states;
 mod world;
 mod resources;
 mod components;
+mod physics;
 
 fn main() {
     let game = Minigolf::new();
