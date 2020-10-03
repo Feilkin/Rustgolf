@@ -14,7 +14,7 @@ use std::cell::RefCell;
 pub struct MyWorld {
     pub next_entity_id: usize,
     pub entities: Vec<Entity>,
-    pub components: RefCell<HashMap<TypeId, RefCell<Box<dyn Any>>>>,
+    pub components: HashMap<TypeId, Box<dyn Any>>,
     pub physics_world: PhysicsWorld<f32>,
 }
 
@@ -23,9 +23,13 @@ impl MyWorld {
         MyWorld {
             next_entity_id: 0,
             entities: Vec::new(),
-            components: RefCell::new(HashMap::default()),
+            components: HashMap::default(),
             physics_world: PhysicsWorld::new(Vector::new(0., 0.))
         }
+    }
+
+    pub fn register<C: Component + Any + Debug>(&mut self) -> () {
+        self.components.insert(TypeId::of::<C>(), Box::new(VecStorage::<C>::new()));
     }
 }
 
@@ -75,12 +79,9 @@ impl<C: Component + Any + Debug> WorldStorage<C> for MyWorld {
     type Storage = VecStorage<C>;
 
     fn storage<'s, 'w: 's>(&'w self) -> &'s Self::Storage {
-        let mut components = self.components.borrow_mut();
-
-        let entry = components
-            .entry(TypeId::of::<C>())
-            .or_insert_with(|| RefCell::new(Box::new(VecStorage::<C>::default()) as Box<dyn Any>))
-            .borrow_mut()
+        self.components
+            .get(&TypeId::of::<C>())
+            .unwrap()
             .downcast_ref()
             .unwrap()
     }
