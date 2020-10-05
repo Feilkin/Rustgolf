@@ -10,13 +10,13 @@ use minigolf::Minigolf;
 
 use mela::application::Application;
 
-mod minigolf;
-mod states;
-mod world;
-mod resources;
 mod components;
+mod minigolf;
 mod physics;
 mod player;
+mod resources;
+mod states;
+mod world;
 
 fn main() {
     let game = Minigolf::new();

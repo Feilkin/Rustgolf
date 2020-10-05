@@ -1,22 +1,22 @@
 //! Analytical physics engine
 
-use mela::nalgebra as na;
-use mela::ecs::{System, Component};
-use mela::gfx::RenderContext;
-use mela::game::IoState;
-use std::time::{Instant, Duration};
 use mela::debug::DebugContext;
-use mela::ecs::system::{Read, Write};
-use std::rc::Rc;
-use mela::nphysics::ncollide2d::simba::scalar::RealField;
 use mela::ecs::component::Transform;
-use mela::nalgebra::{Point2, Similarity2, Vector2, Isometry3, Isometry2};
+use mela::ecs::system::{Read, Write};
 use mela::ecs::world::{World, WorldStorage};
-use std::ops::Mul;
-use std::cell::{RefCell, Ref};
-use std::borrow::Borrow;
+use mela::ecs::{Component, System};
+use mela::game::IoState;
 use mela::gfx::primitives::PrimitiveComponent;
 use mela::gfx::primitives::PrimitiveShape;
+use mela::gfx::RenderContext;
+use mela::nalgebra as na;
+use mela::nalgebra::{Isometry2, Isometry3, Point2, Similarity2, Vector2};
+use mela::nphysics::ncollide2d::simba::scalar::RealField;
+use std::borrow::Borrow;
+use std::cell::{Ref, RefCell};
+use std::ops::Mul;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 const EVENT_MARGIN: f64 = 0.001;
 const COLLISION_MARGIN: f64 = 0.0000000000001;
@@ -26,24 +26,24 @@ pub struct PhysicsBody<T, N: RealField = f64> {
     pub body: T,
     pub position: na::Point2<N>,
     pub velocity: na::Vector2<N>,
-    pub acceleration: na::Vector2<N>
+    pub acceleration: na::Vector2<N>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Wall<N: RealField = f64> {
     pub start: Point2<N>,
-    pub end: Point2<N>
+    pub end: Point2<N>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Ball<N: RealField = f64> {
-    pub radius: N
+    pub radius: N,
 }
 
 #[derive(Clone, Debug)]
 pub struct BallComponent {
     pub index: usize,
-    pub hidden: bool
+    pub hidden: bool,
 }
 
 impl Component for BallComponent {}
@@ -52,7 +52,7 @@ impl Component for BallComponent {}
 pub enum Event {
     BallCollision(usize, usize),
     BallStopped(usize),
-    BallStaticCollision(usize, Vector2<f64>),
+    BallStaticCollision(usize, usize, Vector2<f64>),
 }
 
 #[derive(Clone, Debug)]
@@ -61,17 +61,22 @@ pub struct Snapshot<N: RealField> {
     pub end_time: Duration,
     pub balls: Vec<PhysicsBody<Ball<N>, N>>,
     pub ignore_collisions: Vec<(usize, usize)>,
+    pub ignore_wall_collisions: Vec<(usize, usize)>,
     pub index: usize,
     pub walls: Rc<RefCell<Vec<Wall>>>,
 }
 
 impl Snapshot<f64> {
-    pub fn new(balls: Vec<PhysicsBody<Ball<f64>, f64>>, walls: Rc<RefCell<Vec<Wall<f64>>>>) -> Snapshot<f64> {
+    pub fn new(
+        balls: Vec<PhysicsBody<Ball<f64>, f64>>,
+        walls: Rc<RefCell<Vec<Wall<f64>>>>,
+    ) -> Snapshot<f64> {
         Snapshot {
             start_time: Duration::new(0, 0),
             end_time: Duration::new(u64::MAX, 999_999_999),
             balls,
             ignore_collisions: Vec::new(),
+            ignore_wall_collisions: Vec::new(),
             index: 0,
             walls,
         }
@@ -91,11 +96,12 @@ impl Snapshot<f64> {
 
     pub fn next_snapshot(&mut self) -> Option<Snapshot<f64>> {
         if self.index >= 1000 - 1 {
-            return None
+            return None;
         }
 
         // find next collision
         let mut ignored = Vec::new();
+        let mut ignored_walls = Vec::new();
         let mut smallest = std::f64::INFINITY;
         let mut events = Vec::new();
 
@@ -106,7 +112,7 @@ impl Snapshot<f64> {
         for (i, ball) in self.balls.iter().enumerate() {
             let stop_t = self.ball_stop_time(ball);
 
-            if stop_t < smallest - EVENT_MARGIN  {
+            if stop_t < smallest - EVENT_MARGIN {
                 smallest = stop_t;
                 events.clear();
                 events.push(Event::BallStopped(i));
@@ -114,16 +120,35 @@ impl Snapshot<f64> {
                 events.push(Event::BallStopped(i));
             }
 
-            for wall in walls.iter() {
+            for (j, wall) in walls.iter().enumerate() {
                 if let Some(toi) = self.ball_wall_toi(ball, wall) {
-                    if toi < smallest - EVENT_MARGIN {
-                        println!("new toi {}", toi);
-                        smallest = toi;
-                        events.clear();
-                        events.push(Event::BallStopped(i));
+                    let delta = &wall.end - &wall.start;
+                    let n1 = Vector2::new(-delta.y, delta.x).normalize();
+                    let n2 = Vector2::new(delta.y, -delta.x).normalize();
+
+                    let n = if n1.angle(&ball.velocity) >= n2.angle(&ball.velocity) {
+                        n1
                     } else {
-                        println!("old toi {}", toi);
-                        events.push(Event::BallStopped(i));
+                        n2
+                    };
+
+                    if toi < smallest - EVENT_MARGIN {
+                        if self.ignore_wall_collisions.contains(&(i, j)) {
+                            ignored_walls.push((i, j));
+                            continue;
+                        } else {
+                            smallest = toi;
+                            ignored_walls.clear();
+                            events.clear();
+                            events.push(Event::BallStaticCollision(i, j, n));
+                        }
+                    } else if (toi - smallest).abs() <= EVENT_MARGIN {
+                        if self.ignore_wall_collisions.contains(&(i, j)) {
+                            ignored_walls.push((i, j));
+                            continue;
+                        } else {
+                            events.push(Event::BallStaticCollision(i, j, n));
+                        }
                     }
                 }
             }
@@ -133,9 +158,10 @@ impl Snapshot<f64> {
             let toi = self.ball_ball_toi(ball, other);
 
             if let Some(toi) = toi {
-
-                if toi < smallest - EVENT_MARGIN  {
-                    if self.ignore_collisions.contains(&(i, j)) || self.ignore_collisions.contains(&(j, i)) {
+                if toi < smallest - EVENT_MARGIN {
+                    if self.ignore_collisions.contains(&(i, j))
+                        || self.ignore_collisions.contains(&(j, i))
+                    {
                         ignored.push((i, j));
                         continue;
                     } else {
@@ -145,7 +171,9 @@ impl Snapshot<f64> {
                         events.push(Event::BallCollision(i, j));
                     }
                 } else if (toi - smallest).abs() <= EVENT_MARGIN {
-                    if self.ignore_collisions.contains(&(i, j)) || self.ignore_collisions.contains(&(j, i)) {
+                    if self.ignore_collisions.contains(&(i, j))
+                        || self.ignore_collisions.contains(&(j, i))
+                    {
                         ignored.push((i, j));
                         continue;
                     } else {
@@ -155,23 +183,36 @@ impl Snapshot<f64> {
             }
         }
 
+        smallest = smallest.max(0.);
+
         if smallest < std::f64::INFINITY {
             self.end_time = self.start_time + Duration::from_secs_f64(smallest);
             let mut new = self.advance_to(smallest);
             new.ignore_collisions = ignored;
+            new.ignore_wall_collisions = ignored_walls;
 
             for event in &events {
-
                 match &event {
                     Event::BallCollision(ball, other) => {
-                        new.ignore_collisions = new.ignore_collisions.iter().filter(|(a, b)| a != ball && b != ball && a != other && b != other).cloned().collect();
+                        new.ignore_collisions = new
+                            .ignore_collisions
+                            .iter()
+                            .filter(|(a, b)| a != ball && b != ball && a != other && b != other)
+                            .cloned()
+                            .collect();
                         new.ignore_collisions.push((*ball, *other));
                         new = new.handle_collision_pair(*ball, *other);
-                    },
+                    }
                     Event::BallStopped(ball) => {
                         new.balls[*ball].velocity = Vector2::new(0., 0.);
                     }
-                    _ => {}
+                    Event::BallStaticCollision(ball, wall, normal) => {
+                        new.ignore_wall_collisions.push((*ball, *wall));
+                        let ball = &mut new.balls[*ball];
+                        let new_velocity =
+                            &ball.velocity - 2. * &ball.velocity.dot(normal) * normal * 0.86;
+                        ball.velocity = new_velocity;
+                    }
                 }
             }
 
@@ -186,7 +227,8 @@ impl Snapshot<f64> {
 
         for ball in &self.balls {
             let acc = self.ball_acceleration(ball);
-            let mut new_velocity = Vector2::new(ball.velocity.x + &acc.x * t, ball.velocity.y + &acc.y * t);
+            let mut new_velocity =
+                Vector2::new(ball.velocity.x + &acc.x * t, ball.velocity.y + &acc.y * t);
 
             if new_velocity.norm() <= 1.0 {
                 new_velocity = Vector2::new(0., 0.)
@@ -194,9 +236,13 @@ impl Snapshot<f64> {
 
             new_balls.push(PhysicsBody {
                 body: ball.body.clone(),
-                position: &ball.position + Vector2::new(&ball.velocity.x * t + 0.5 * &acc.x * t.powf(2.), &ball.velocity.y * t + 0.5 * &acc.y * t.powf(2.)),
+                position: &ball.position
+                    + Vector2::new(
+                        &ball.velocity.x * t + 0.5 * &acc.x * t.powf(2.),
+                        &ball.velocity.y * t + 0.5 * &acc.y * t.powf(2.),
+                    ),
                 velocity: new_velocity,
-                acceleration: ball.acceleration.clone_owned()
+                acceleration: ball.acceleration.clone_owned(),
             });
         }
 
@@ -206,6 +252,7 @@ impl Snapshot<f64> {
             balls: new_balls,
             index: self.index + 1,
             ignore_collisions: Vec::new(),
+            ignore_wall_collisions: Vec::new(),
             walls: Rc::clone(&self.walls),
         }
     }
@@ -220,8 +267,8 @@ impl Snapshot<f64> {
         let x1x2 = &x1 - &x2;
         let x2x1 = &x2 - &x1;
 
-        self.balls[ball].velocity = &v1 - v1v2.dot(&x1x2)/x1x2.norm_squared()*&x1x2;
-        self.balls[other].velocity = &v2 - v2v1.dot(&x2x1)/x2x1.norm_squared()*&x2x1;
+        self.balls[ball].velocity = &v1 - v1v2.dot(&x1x2) / x1x2.norm_squared() * &x1x2 * 0.86;
+        self.balls[other].velocity = &v2 - v2v1.dot(&x2x1) / x2x1.norm_squared() * &x2x1 * 0.86;
 
         self
     }
@@ -235,7 +282,10 @@ impl Snapshot<f64> {
             }
 
             let vel_normalized = ball.velocity.normalize();
-            let ff = Vector2::new(0.22 * 9.81 * vel_normalized.x, 0.22 * 9.81 * vel_normalized.y);
+            let ff = Vector2::new(
+                0.22 * 9.81 * vel_normalized.x,
+                0.22 * 9.81 * vel_normalized.y,
+            );
 
             ball.velocity.norm() / ff.norm()
         }
@@ -246,18 +296,21 @@ impl Snapshot<f64> {
             Vector2::new(0., 0.)
         } else {
             let vel_normalized = ball.velocity.normalize();
-            let ff = Vector2::new(0.22 * 9.81 * vel_normalized.x, 0.22 * 9.81 * vel_normalized.y);
+            let ff = Vector2::new(
+                0.50 * 9.81 * vel_normalized.x,
+                0.50 * 9.81 * vel_normalized.y,
+            );
 
             ball.acceleration.clone_owned() - ff
         }
     }
 
-    fn ball_wall_toi(&self, ball: &PhysicsBody<Ball>, wall: &Wall) -> Option<f64> {
-        if (wall.start.x - wall.end.x).abs() <= f64::EPSILON {
+    fn ball_line_toi(&self, ball: &PhysicsBody<Ball>, wall: &Wall) -> Option<f64> {
+        if wall.start.x == wall.end.x {
             // along y axis
             None
         } else {
-            let k = (&wall.end - &wall.start).norm();
+            let k = (&wall.end.y - &wall.start.y) / (&wall.end.x - &wall.start.x);
             let c = wall.start.y - wall.start.x * k;
             let acc = self.ball_acceleration(ball);
             let a = acc.x * k - acc.y;
@@ -271,17 +324,48 @@ impl Snapshot<f64> {
                     Some(c / b)
                 }
             } else {
-                let t1 = (-b + (b.powf(2.) - 2. * a * c).sqrt()) / a;
-                let t2 = (-b - (b.powf(2.) - 2. * a * c).sqrt()) / a;
+                let d = b.powf(2.) - 2. * a * c;
 
-                if t1 >= 0. && t1 < t2 {
-                    Some(t1)
-                } else if t2 >= 0. {
-                    Some(t2)
-                } else {
+                if d < 0. {
                     None
+                } else {
+                    let t1 = (-b + d.sqrt()) / a;
+                    let t2 = (-b - d.sqrt()) / a;
+
+                    if t1 >= 0. {
+                        if t2 >= 0. && t2 < t1 {
+                            Some(t2)
+                        } else {
+                            Some(t1)
+                        }
+                    } else if t2 >= 0. {
+                        Some(t2)
+                    } else {
+                        None
+                    }
                 }
             }
+        }
+    }
+
+    fn ball_wall_toi(&self, ball: &PhysicsBody<Ball>, wall: &Wall) -> Option<f64> {
+        if let Some(toi) = self.ball_line_toi(ball, wall) {
+            let acc = self.ball_acceleration(ball);
+            let impact_pos = &ball.position + &ball.velocity * toi + 0.5 * acc * toi.powf(2.);
+
+            let x1 = wall.start.x.min(wall.end.x);
+            let x2 = wall.start.x.max(wall.end.x);
+            let y1 = wall.start.y.min(wall.end.y);
+            let y2 = wall.start.y.max(wall.end.y);
+
+            if impact_pos.x >= x1 && impact_pos.x <= x2 && impact_pos.y >= y1 && impact_pos.y <= y2
+            {
+                Some(toi)
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
@@ -290,13 +374,25 @@ impl Snapshot<f64> {
 
         let acc = self.ball_acceleration(ball);
         let (a1x, a1y) = (Complex::new(acc.x, 0.), Complex::new(acc.y, 0.));
-        let (v1x, v1y) = (Complex::new(ball.velocity.x, 0.),  Complex::new(ball.velocity.y, 0.));
-        let (x1, y1) = (Complex::new(ball.position.x, 0.), Complex::new(ball.position.y, 0.));
+        let (v1x, v1y) = (
+            Complex::new(ball.velocity.x, 0.),
+            Complex::new(ball.velocity.y, 0.),
+        );
+        let (x1, y1) = (
+            Complex::new(ball.position.x, 0.),
+            Complex::new(ball.position.y, 0.),
+        );
 
         let other_acc = self.ball_acceleration(other);
         let (a2x, a2y) = (Complex::new(other_acc.x, 0.), Complex::new(other_acc.y, 0.));
-        let (v2x, v2y) = (Complex::new(other.velocity.x, 0.), Complex::new(other.velocity.y, 0.));
-        let (x2, y2) = (Complex::new(other.position.x, 0.), Complex::new(other.position.y, 0.));
+        let (v2x, v2y) = (
+            Complex::new(other.velocity.x, 0.),
+            Complex::new(other.velocity.y, 0.),
+        );
+        let (x2, y2) = (
+            Complex::new(other.position.x, 0.),
+            Complex::new(other.position.y, 0.),
+        );
 
         let dax = a1x - a2x;
         let day = a1y - a2y;
@@ -314,7 +410,7 @@ impl Snapshot<f64> {
             let var_194 = dvy.powf(2.);
             let var_191 = dvx.powf(2.);
             let var_195 = var_191 + var_194;
-            let var_196 = 1./var_195;
+            let var_196 = 1. / var_195;
             let var_197 = -dvx * dx;
             let var_198 = -dvy * dy;
             let var_202 = dx.powf(2.);
@@ -349,8 +445,8 @@ impl Snapshot<f64> {
         let var_131 = dax * dvx;
         let var_132 = day * dvy;
         let var_133 = var_131 + var_132;
-        let var_130 = 1./var_129;
-        let var_135 = 1./var_129.powf(2.);
+        let var_130 = 1. / var_129;
+        let var_135 = 1. / var_129.powf(2.);
         let var_138 = dvx.powf(2.);
         let var_139 = dvy.powf(2.);
         let var_140 = dax * dx;
@@ -384,34 +480,34 @@ impl Snapshot<f64> {
         let var_177 = var_176.sqrt();
         let var_178 = var_166 + var_167 + var_169 + var_177 + var_172 + var_173;
         let var_155 = Complex::new((2f64).cbrt(), 0.);
-        let var_179 = 1./var_178.cbrt();
+        let var_179 = 1. / var_178.cbrt();
         let var_181 = Complex::new(0.5f64.cbrt(), 0.);
         let var_182 = var_178.cbrt();
         let var_153 = 4. * var_135 * var_136;
-        let var_154 = -((8. * var_130 * var_142)/3.);
-        let var_180 = 1./3. * var_155 * var_130 * var_164 * var_179;
-        let var_183 = (var_181 * var_130 * var_182)/3.;
+        let var_154 = -((8. * var_130 * var_142) / 3.);
+        let var_180 = 1. / 3. * var_155 * var_130 * var_164 * var_179;
+        let var_183 = (var_181 * var_130 * var_182) / 3.;
         let var_184 = var_153 + var_154 + var_180 + var_183;
         let var_134 = -var_130 * var_133;
         let var_137 = 8. * var_135 * var_136;
-        let var_143 = -((16. * var_130 * var_142)/ 3.);
-        let var_144 = 1./var_129.powf(3.);
+        let var_143 = -((16. * var_130 * var_142) / 3.);
+        let var_144 = 1. / var_129.powf(3.);
         let var_145 = var_133.powf(3.);
         let var_146 = -64. * var_144 * var_145;
         let var_147 = 64. * var_135 * var_133 * var_142;
         let var_151 = -64. * var_130 * var_150;
         let var_152 = var_146 + var_147 + var_151;
-        let var_185 = 1./var_184.sqrt();
-        let var_186 = -((var_152 * var_185)/ 4.);
-        let var_187 = -(1./3.) * var_155 * var_130 * var_164 * var_179;
-        let var_188 = -(1./3.) * var_181 * var_130 * var_182;
+        let var_185 = 1. / var_184.sqrt();
+        let var_186 = -((var_152 * var_185) / 4.);
+        let var_187 = -(1. / 3.) * var_155 * var_130 * var_164 * var_179;
+        let var_188 = -(1. / 3.) * var_181 * var_130 * var_182;
         let var_189 = var_137 + var_143 + var_186 + var_187 + var_188;
         let var_190 = var_189.sqrt();
         let var_192 = var_184.sqrt();
-        let var_199 = (var_152 * var_185)/4.;
+        let var_199 = (var_152 * var_185) / 4.;
         let var_200 = var_137 + var_143 + var_199 + var_187 + var_188;
         let var_201 = var_200.sqrt();
-        let var_203 = var_192/2.;
+        let var_203 = var_192 / 2.;
 
         let t1 = var_134 - var_190 / 2. - var_203;
         let t2 = var_134 + var_190 / 2. - var_203;
@@ -440,24 +536,47 @@ pub struct PhysicsAnimator<N: RealField> {
     paused: bool,
 }
 
-impl<N> PhysicsAnimator<N> where N: RealField {
-    pub fn new(snapshots: Rc<RefCell<Vec<Snapshot<N>>>>, timer: Rc<RefCell<Duration>>) -> PhysicsAnimator<N> {
+impl<N> PhysicsAnimator<N>
+where
+    N: RealField,
+{
+    pub fn new(
+        snapshots: Rc<RefCell<Vec<Snapshot<N>>>>,
+        timer: Rc<RefCell<Duration>>,
+    ) -> PhysicsAnimator<N> {
         PhysicsAnimator {
             snapshots,
             timer,
-            paused: true
+            paused: true,
         }
     }
 }
 
-impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transform<f64>> + WorldStorage<BallComponent> + WorldStorage<PrimitiveComponent> {
-    type SystemData<'a> = (Write<'a, Transform<f64>>, Read<'a, BallComponent>, Write<'a, PrimitiveComponent>);
+impl<W> System<W> for PhysicsAnimator<f64>
+where
+    W: World
+        + WorldStorage<Transform<f64>>
+        + WorldStorage<BallComponent>
+        + WorldStorage<PrimitiveComponent>,
+{
+    type SystemData<'a> = (
+        Write<'a, Transform<f64>>,
+        Read<'a, BallComponent>,
+        Write<'a, PrimitiveComponent>,
+    );
 
     fn name(&self) -> &'static str {
         "PhysicsAnimator"
     }
 
-    fn update<'f>(&mut self, (mut transforms, balls, mut primitives): Self::SystemData<'f>, delta: Duration, _io_state: &IoState, _render_ctx: &mut RenderContext, _debug_ctx: &mut DebugContext) -> () {
+    fn update<'f>(
+        &mut self,
+        (mut transforms, balls, mut primitives): Self::SystemData<'f>,
+        delta: Duration,
+        _io_state: &IoState,
+        _render_ctx: &mut RenderContext,
+        _debug_ctx: &mut DebugContext,
+    ) -> () {
         use mela::imgui::im_str;
         let ui = &_debug_ctx.ui;
 
@@ -465,13 +584,20 @@ impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transfo
 
         if !self.paused {
             *current_time += delta;
+
+            if *current_time >= Duration::new(30, 0) {
+                *current_time = Duration::new(0, 0);
+            }
         }
 
         if let Some(current_snapshot) = {
             let snapshots = (*self.snapshots).borrow();
             let mut found = None;
             for snapshot in &*snapshots {
-                if snapshot.end_time >= *current_time { found = Some(snapshot.clone()); break }
+                if snapshot.end_time >= *current_time {
+                    found = Some(snapshot.clone());
+                    break;
+                }
             }
 
             found
@@ -480,23 +606,28 @@ impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transfo
 
             for (entity, mut transform) in transforms.iter_mut() {
                 if let Some(ball) = balls.fetch(entity) {
-                    let BallComponent {
-                        index, hidden
-                    } = ball;
+                    let BallComponent { index, hidden } = ball;
 
                     if !hidden {
                         let ball_body = &current_snapshot.balls[*index];
 
                         let (pos, ball) = current_snapshot.ball_pos(*index, *current_time);
-                        transform.0 = Isometry2::new(Vector2::new(pos.x, pos.y), 
-                        ball_body.velocity.y.atan2(ball_body.velocity.x));
+                        transform.0 = Isometry2::new(
+                            Vector2::new(pos.x, pos.y),
+                            ball_body.velocity.y.atan2(ball_body.velocity.x),
+                        );
 
-                        let (_, mut primitive) = primitives.iter_mut().find(|(e, _)| *e == entity).unwrap();
+                        let (_, mut primitive) =
+                            primitives.iter_mut().find(|(e, _)| *e == entity).unwrap();
 
-                        let t = current_time.checked_sub(current_snapshot.start_time).unwrap().as_secs_f64();
-                        let v = ball_body.velocity + current_snapshot.ball_acceleration(ball_body) * t;
+                        let t = current_time
+                            .checked_sub(current_snapshot.start_time)
+                            .unwrap()
+                            .as_secs_f64();
+                        let v =
+                            ball_body.velocity + current_snapshot.ball_acceleration(ball_body) * t;
 
-                        let stretch:  f64 = 1.0 + v.norm() / 1000.0;
+                        let stretch: f64 = 1.0 + v.norm() / 1000.0;
                         let x = ball.radius * stretch;
                         let y = ball.radius / stretch;
 
@@ -504,12 +635,7 @@ impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transfo
                     }
                 }
             }
-
-            if current_snapshot.end_time >= Duration::new(u64::MAX, 0) {
-                *current_time = Duration::new(0, 0);
-            }
         }
-
 
         if self.paused {
             if ui.button(im_str!("Paused"), [80., 25.]) {
@@ -517,11 +643,12 @@ impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transfo
             }
             let mut temp = current_time.as_secs_f32();
 
-            if ui.drag_float(im_str!("Timer"), &mut temp)
+            if ui
+                .drag_float(im_str!("Timer"), &mut temp)
                 .speed(0.1)
                 .min(0.)
-                .build() {
-
+                .build()
+            {
                 *current_time = Duration::from_secs_f32(temp.max(0.));
             }
         } else {

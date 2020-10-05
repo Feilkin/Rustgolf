@@ -1,19 +1,19 @@
-use mela::ecs::{Component, System};
-use std::cell::RefCell;
-use std::time::Duration;
-use std::rc::Rc;
-use crate::world::MyWorld;
-use mela::gfx::RenderContext;
-use mela::game::IoState;
-use mela::debug::DebugContext;
-use mela::ecs::system::{Read, Write};
 use crate::physics::{BallComponent, Snapshot, Wall};
+use crate::world::MyWorld;
+use mela::debug::DebugContext;
 use mela::ecs::component::Transform;
-use mela::nalgebra::Vector2;
-use mela::nalgebra as na;
+use mela::ecs::system::{Read, Write};
+use mela::ecs::{Component, System};
+use mela::game::IoState;
 use mela::gfx::primitives::{PrimitiveComponent, PrimitiveShape};
+use mela::gfx::RenderContext;
 use mela::lyon::lyon_algorithms::path::Path;
 use mela::lyon::lyon_tessellation::math::Point;
+use mela::nalgebra as na;
+use mela::nalgebra::Vector2;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::Duration;
 
 #[derive(Clone, Debug)]
 pub struct PlayerController {}
@@ -22,26 +22,37 @@ impl Component for PlayerController {}
 
 pub struct PlayerInput {
     timer: Rc<RefCell<Duration>>,
-    snapshots: Rc<RefCell<Vec<Snapshot<f64>>>>
+    snapshots: Rc<RefCell<Vec<Snapshot<f64>>>>,
 }
 
 impl PlayerInput {
-    pub fn new(timer: Rc<RefCell<Duration>>, snapshots: Rc<RefCell<Vec<Snapshot<f64>>>>) -> PlayerInput {
-        PlayerInput {
-            timer,
-            snapshots
-        }
+    pub fn new(
+        timer: Rc<RefCell<Duration>>,
+        snapshots: Rc<RefCell<Vec<Snapshot<f64>>>>,
+    ) -> PlayerInput {
+        PlayerInput { timer, snapshots }
     }
 }
 
 impl System<MyWorld> for PlayerInput {
-    type SystemData<'a> = (Read<'a, PlayerController>, Read<'a, BallComponent>, Read<'a, Transform<f64>>);
+    type SystemData<'a> = (
+        Read<'a, PlayerController>,
+        Read<'a, BallComponent>,
+        Read<'a, Transform<f64>>,
+    );
 
     fn name(&self) -> &'static str {
         "PlayerInput"
     }
 
-    fn update<'f>(&mut self, (controller, balls, transforms): Self::SystemData<'f>, delta: Duration, io_state: &IoState, render_ctx: &mut RenderContext, debug_ctx: &mut DebugContext) -> () {
+    fn update<'f>(
+        &mut self,
+        (controller, balls, transforms): Self::SystemData<'f>,
+        delta: Duration,
+        io_state: &IoState,
+        render_ctx: &mut RenderContext,
+        debug_ctx: &mut DebugContext,
+    ) -> () {
         let (entity, _) = controller.iter().next().unwrap();
         let current_time = self.timer.borrow();
 
@@ -49,13 +60,19 @@ impl System<MyWorld> for PlayerInput {
         let transform = transforms.fetch(entity).unwrap().clone();
 
         if io_state.mouse_buttons[0] {
-            let impulse = Vector2::new(io_state.mouse_position[0] as f64, io_state.mouse_position[1] as f64) - &transform.0.translation.vector;
+            let impulse = Vector2::new(
+                io_state.mouse_position[0] as f64,
+                io_state.mouse_position[1] as f64,
+            ) - &transform.0.translation.vector;
 
             if let Some(snapshot_index) = {
                 let snapshots = (*self.snapshots).borrow();
                 let mut found = None;
                 for (i, snapshot) in snapshots.iter().enumerate() {
-                    if snapshot.end_time >= *current_time { found = Some(i); break }
+                    if snapshot.end_time >= *current_time {
+                        found = Some(i);
+                        break;
+                    }
                 }
 
                 found
@@ -63,12 +80,14 @@ impl System<MyWorld> for PlayerInput {
                 let mut snapshots = self.snapshots.borrow_mut();
                 let mut current_snapshot = &mut snapshots[snapshot_index];
                 current_snapshot.end_time = current_time.clone();
-                let mut new = current_snapshot.advance_to((*current_time - current_snapshot.start_time).as_secs_f64());
+                let mut new = current_snapshot
+                    .advance_to((*current_time - current_snapshot.start_time).as_secs_f64());
                 new.ignore_collisions = current_snapshot.ignore_collisions.clone();
 
                 new.balls[ball.index].velocity = impulse;
 
-                let mut new_snapshots: Vec<Snapshot<f64>> = snapshots[..=snapshot_index].iter().cloned().collect();
+                let mut new_snapshots: Vec<Snapshot<f64>> =
+                    snapshots[..=snapshot_index].iter().cloned().collect();
                 new_snapshots.push(new);
 
                 let mut seed_index = snapshot_index + 1;
@@ -110,20 +129,37 @@ impl System<MyWorld> for LineDrawer {
         "LineDrawer"
     }
 
-    fn update<'f>(&mut self, (wall_components, mut primitives): Self::SystemData<'f>, delta: Duration, io_state: &IoState, render_ctx: &mut RenderContext, debug_ctx: &mut DebugContext) -> () {
+    fn update<'f>(
+        &mut self,
+        (wall_components, mut primitives): Self::SystemData<'f>,
+        delta: Duration,
+        io_state: &IoState,
+        render_ctx: &mut RenderContext,
+        debug_ctx: &mut DebugContext,
+    ) -> () {
         let snapshots = self.snapshots.borrow_mut();
         let mut walls = snapshots.first().unwrap().walls.borrow_mut();
 
         let (wall_entity, _) = wall_components.iter().next().unwrap();
-        let (_, primitive) = primitives.iter_mut().find(|(e, _)| *e == wall_entity).unwrap();
+        let (_, primitive) = primitives
+            .iter_mut()
+            .find(|(e, _)| *e == wall_entity)
+            .unwrap();
 
         if io_state.mouse_buttons[2] {
             if !self.added_wall {
                 let last = walls.last().unwrap().end.clone();
                 walls.push(Wall {
                     start: last,
-                    end: na::Point2::new(io_state.mouse_position[0] as f64, io_state.mouse_position[1] as f64)
-                })
+                    end: na::Point2::new(
+                        io_state.mouse_position[0] as f64,
+                        io_state.mouse_position[1] as f64,
+                    ),
+                });
+
+                dbg!(&walls);
+
+                self.added_wall = true;
             }
         } else {
             self.added_wall = false;

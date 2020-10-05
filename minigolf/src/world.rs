@@ -1,15 +1,15 @@
 use std::time::Instant;
 
-use mela::ecs::entity::EntityBuilder;
-use mela::ecs::world::{World, WorldStorage};
-use mela::ecs::{DequeStorage, Entity, VecStorage, Component};
-use mela::ecs::system::physics::PhysicsWorld;
 use crate::components::Components;
+use mela::ecs::entity::EntityBuilder;
+use mela::ecs::system::physics::PhysicsWorld;
+use mela::ecs::world::{World, WorldStorage};
+use mela::ecs::{Component, DequeStorage, Entity, VecStorage};
 use mela::nphysics::math::Vector;
-use std::collections::HashMap;
-use std::any::{TypeId, Any};
-use std::fmt::Debug;
+use std::any::{Any, TypeId};
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt::Debug;
 
 pub struct MyWorld {
     pub next_entity_id: usize,
@@ -24,12 +24,13 @@ impl MyWorld {
             next_entity_id: 0,
             entities: Vec::new(),
             components: HashMap::default(),
-            physics_world: PhysicsWorld::new(Vector::new(0., 0.))
+            physics_world: PhysicsWorld::new(Vector::new(0., 0.)),
         }
     }
 
     pub fn register<C: Component + Any + Debug>(mut self) -> MyWorld {
-        self.components.insert(TypeId::of::<C>(), Box::new(VecStorage::<C>::new()));
+        self.components
+            .insert(TypeId::of::<C>(), Box::new(VecStorage::<C>::new()));
         self
     }
 }

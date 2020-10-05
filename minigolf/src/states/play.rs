@@ -1,27 +1,27 @@
 //! play :)
 
-use mela::asset::tilemap::{Tilemap, Orthogonal};
-use std::cell::RefCell;
-use mela::state::State;
+use crate::physics::{Ball, BallComponent, PhysicsAnimator, PhysicsBody, Snapshot, Wall};
+use crate::player::{LineDrawer, PlayerController, PlayerInput, WallComponent};
 use crate::world::MyWorld;
-use mela::gfx::RenderContext;
-use mela::game::IoState;
-use std::time::{Duration, Instant};
+use mela::asset::tilemap::{Orthogonal, Tilemap};
 use mela::debug::{DebugContext, DebugDrawable};
-use mela::ecs::system::SystemCaller;
-use crate::physics::{BallComponent, PhysicsAnimator, Snapshot, PhysicsBody, Ball, Wall};
 use mela::ecs::component::Transform;
-use std::rc::Rc;
-use mela::gfx::primitives::{PrimitiveComponent, PrimitiveShape};
+use mela::ecs::system::SystemCaller;
 use mela::ecs::world::World;
+use mela::game::IoState;
+use mela::gfx::primitives::{PrimitiveComponent, PrimitiveShape};
+use mela::gfx::RenderContext;
 use mela::lyon;
-use mela::nphysics::ncollide2d::na::{Isometry2, Point2, Vector2};
-use crate::player::{PlayerController, PlayerInput, WallComponent, LineDrawer};
 use mela::lyon::algorithms::path::Path;
+use mela::nphysics::ncollide2d::na::{Isometry2, Point2, Vector2};
+use mela::state::State;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 pub struct Play {
     world: MyWorld,
-    systems: Vec<Box<dyn SystemCaller<MyWorld>>>
+    systems: Vec<Box<dyn SystemCaller<MyWorld>>>,
 }
 
 impl Play {
@@ -30,9 +30,58 @@ impl Play {
         let mut snapshots = Vec::new();
         let walls = Rc::new(RefCell::new(vec![
             Wall {
-                start: Point2::new(10., 10.,),
-                end: Point2::new(10., 700.,),
-            }
+                start: Point2::new(63.0, 374.0),
+
+                end: Point2::new(383.0, 689.0),
+            },
+            Wall {
+                start: Point2::new(383.0, 689.0),
+                end: Point2::new(826.0, 689.0),
+            },
+            Wall {
+                start: Point2::new(826.0, 689.0),
+                end: Point2::new(1201.0, 314.0),
+            },
+            Wall {
+                start: Point2::new(1201.0, 314.0),
+                end: Point2::new(920.0, 32.0),
+            },
+            Wall {
+                start: Point2::new(920.0, 32.0),
+                end: Point2::new(679.0, 273.0),
+            },
+            Wall {
+                start: Point2::new(679.0, 273.0),
+                end: Point2::new(861.0, 456.0),
+            },
+            Wall {
+                start: Point2::new(861.0, 456.0),
+                end: Point2::new(800.0, 517.0),
+            },
+            Wall {
+                start: Point2::new(800.0, 517.0),
+                end: Point2::new(722.0, 440.0),
+            },
+            Wall {
+                start: Point2::new(722.0, 440.0),
+                end: Point2::new(571.0, 591.0),
+            },
+            Wall {
+                start: Point2::new(571.0, 591.0),
+                end: Point2::new(481.0, 502.0),
+            },
+            Wall {
+                start: Point2::new(481.0, 502.0),
+                end: Point2::new(648.0, 335.0),
+            },
+            Wall {
+                start: Point2::new(648.0, 335.0),
+                end: Point2::new(378.0, 65.0),
+            },
+            Wall {
+                start: Point2::new(378.0, 65.0),
+                end: Point2::new(68.0, 374.0),
+            },
         ]));
 
         let mut seed = Snapshot::new(Vec::new(), Rc::clone(&walls));
@@ -44,43 +93,47 @@ impl Play {
             .register::<PlayerController>()
             .register::<WallComponent>();
 
-        world = world.add_entity()
+        world = world
+            .add_entity()
             .with_component(Transform(Isometry2::translation(0., 0.)))
             .with_component(WallComponent {})
             .with_component(PrimitiveComponent {
-                color: [1., 0.8, 0., 0.],
-                shape: PrimitiveShape::Path(Path::new())
-            }).build();
+                color: [0., 0.2, 1., 0.],
+                shape: PrimitiveShape::Path(Path::new()),
+            })
+            .build();
 
-        for i in 0 .. 8 {
+        for i in 0..8 {
             let f = i as f64;
             let k = f % 2.;
             let x = 300. + f % 3. * 60.;
             let y = 100. + (f / 3.).floor() * 60. + k * 10.;
 
             seed.balls.push(PhysicsBody {
-                body: Ball {
-                    radius: 21.335,
-                },
+                body: Ball { radius: 21.335 },
                 position: Point2::new(x, y),
                 velocity: Vector2::new(-(f % 3. - 1.) * 50., 0.),
                 acceleration: Vector2::new(0., 0.),
             });
 
-            let mut entity = world.add_entity()
+            let mut entity = world
+                .add_entity()
                 .with_component(PrimitiveComponent {
-                    color: if i == 0 { [0., 1., 1., 1.] } else { [1., 0., 1., 1.] },
-                    shape: PrimitiveShape::Ball(21.335, 21.335)
+                    color: if i == 0 {
+                        [0., 1., 1., 1.]
+                    } else {
+                        [1., 0., 1., 1.]
+                    },
+                    shape: PrimitiveShape::Ball(21.335, 21.335),
                 })
                 .with_component(Transform(Isometry2::translation(x, y)))
                 .with_component(BallComponent {
                     index: i,
-                    hidden: false
+                    hidden: false,
                 });
 
             if i == 0 {
-                entity = entity
-                    .with_component(PlayerController {});
+                entity = entity.with_component(PlayerController {});
             }
 
             world = entity.build();
@@ -108,11 +161,14 @@ impl Play {
         Play {
             world,
             systems: vec![
-                Box::new(PhysicsAnimator::<f64>::new(Rc::clone(&snapshots), Rc::clone(&timer))) as Box<dyn SystemCaller<MyWorld>>,
+                Box::new(PhysicsAnimator::<f64>::new(
+                    Rc::clone(&snapshots),
+                    Rc::clone(&timer),
+                )) as Box<dyn SystemCaller<MyWorld>>,
                 Box::new(PlayerInput::new(Rc::clone(&timer), Rc::clone(&snapshots))),
                 Box::new(LineDrawer::new(Rc::clone(&snapshots))),
-                Box::new(mela::gfx::primitives::PrimitiveRenderer::new())
-            ]
+                Box::new(mela::gfx::primitives::PrimitiveRenderer::new()),
+            ],
         }
     }
 }
@@ -126,7 +182,13 @@ impl State for Play {
         "Play"
     }
 
-    fn update(mut self, delta: Duration, io_state: &IoState, render_ctx: &mut RenderContext, debug_ctx: &mut DebugContext) -> Self::Wrapper {
+    fn update(
+        mut self,
+        delta: Duration,
+        io_state: &IoState,
+        render_ctx: &mut RenderContext,
+        debug_ctx: &mut DebugContext,
+    ) -> Self::Wrapper {
         for system in &mut self.systems {
             system.dispatch(&self.world, delta, io_state, render_ctx, debug_ctx);
         }

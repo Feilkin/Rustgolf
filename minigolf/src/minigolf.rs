@@ -10,11 +10,11 @@ use mela;
 use mela::game::{IoState, Playable};
 use mela::state::State;
 
-use mela::debug::{DebugDrawable, DebugContext};
-use mela::winit::event::{Event, WindowEvent, MouseButton, ElementState};
-use mela::winit::event_loop::ControlFlow;
-use mela::gfx::RenderContext;
 use crate::states::Play;
+use mela::debug::{DebugContext, DebugDrawable};
+use mela::gfx::RenderContext;
+use mela::winit::event::{ElementState, Event, MouseButton, WindowEvent};
+use mela::winit::event_loop::ControlFlow;
 
 pub(crate) struct Minigolf {
     state: Play,
@@ -31,7 +31,12 @@ impl Minigolf {
 }
 
 impl Playable for Minigolf {
-    fn update(self, delta: Duration, render_ctx: &mut RenderContext, debug_ctx: &mut DebugContext) -> Self {
+    fn update(
+        self,
+        delta: Duration,
+        render_ctx: &mut RenderContext,
+        debug_ctx: &mut DebugContext,
+    ) -> Self {
         let Minigolf {
             mut state,
             io_state,
@@ -39,10 +44,7 @@ impl Playable for Minigolf {
 
         let state = state.update(delta, &io_state, render_ctx, debug_ctx);
 
-        Minigolf {
-            state,
-            io_state
-        }
+        Minigolf { state, io_state }
     }
 
     fn push_event<T>(&mut self, event: &Event<T>) -> Option<ControlFlow> {
@@ -50,9 +52,7 @@ impl Playable for Minigolf {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
-            } => {
-                return Some(ControlFlow::Exit)
-            }
+            } => return Some(ControlFlow::Exit),
             Event::WindowEvent {
                 event: WindowEvent::CursorMoved { position, .. },
                 ..
