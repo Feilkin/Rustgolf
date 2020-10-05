@@ -70,7 +70,7 @@ impl Play {
             let mut entity = world.add_entity()
                 .with_component(PrimitiveComponent {
                     color: if i == 0 { [0., 1., 1., 1.] } else { [1., 0., 1., 1.] },
-                    shape: PrimitiveShape::Ball(21.335)
+                    shape: PrimitiveShape::Ball(21.335, 21.335)
                 })
                 .with_component(Transform(Isometry2::translation(x, y)))
                 .with_component(BallComponent {
