@@ -30,20 +30,36 @@ impl Play {
         let mut snapshots = Vec::new();
         let walls = Rc::new(RefCell::new(vec![
             Wall {
+                start: Point2::new(4., 4.),
+                end: Point2::new(4., 716.),
+            },
+            Wall {
+                start: Point2::new(4., 716.),
+                end: Point2::new(1276., 716.),
+            },
+            Wall {
+                start: Point2::new(1276., 716.),
+                end: Point2::new(1276., 4.),
+            },
+            Wall {
+                start: Point2::new(1276., 4.),
+                end: Point2::new(4., 4.),
+            },
+            Wall {
                 start: Point2::new(63.0, 374.0),
 
                 end: Point2::new(383.0, 689.0),
             },
             Wall {
-                start: Point2::new(383.0, 689.0),
-                end: Point2::new(826.0, 689.0),
+                start: Point2::new(383.0, 689.5),
+                end: Point2::new(826.0, 688.5),
             },
             Wall {
                 start: Point2::new(826.0, 689.0),
                 end: Point2::new(1201.0, 314.0),
             },
             Wall {
-                start: Point2::new(1201.0, 314.0),
+                start: Point2::new(1201.0, 313.0),
                 end: Point2::new(920.0, 32.0),
             },
             Wall {
@@ -51,7 +67,7 @@ impl Play {
                 end: Point2::new(679.0, 273.0),
             },
             Wall {
-                start: Point2::new(679.0, 273.0),
+                start: Point2::new(679.0, 274.0),
                 end: Point2::new(861.0, 456.0),
             },
             Wall {
@@ -59,7 +75,7 @@ impl Play {
                 end: Point2::new(800.0, 517.0),
             },
             Wall {
-                start: Point2::new(800.0, 517.0),
+                start: Point2::new(799.0, 517.0),
                 end: Point2::new(722.0, 440.0),
             },
             Wall {
@@ -67,7 +83,7 @@ impl Play {
                 end: Point2::new(571.0, 591.0),
             },
             Wall {
-                start: Point2::new(571.0, 591.0),
+                start: Point2::new(570.0, 591.0),
                 end: Point2::new(481.0, 502.0),
             },
             Wall {
@@ -79,7 +95,7 @@ impl Play {
                 end: Point2::new(378.0, 65.0),
             },
             Wall {
-                start: Point2::new(378.0, 65.0),
+                start: Point2::new(377.0, 65.0),
                 end: Point2::new(68.0, 374.0),
             },
         ]));
@@ -107,12 +123,12 @@ impl Play {
             let f = i as f64;
             let k = f % 2.;
             let x = 300. + f % 3. * 60.;
-            let y = 100. + (f / 3.).floor() * 60. + k * 10.;
+            let y = 200. + (f / 3.).floor() * 60. + k * 10.;
 
             seed.balls.push(PhysicsBody {
                 body: Ball { radius: 21.335 },
                 position: Point2::new(x, y),
-                velocity: Vector2::new(-(f % 3. - 1.) * 50., 0.),
+                velocity: Vector2::new(0., 0.),
                 acceleration: Vector2::new(0., 0.),
             });
 

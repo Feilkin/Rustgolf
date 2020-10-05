@@ -283,8 +283,8 @@ impl Snapshot<f64> {
 
             let vel_normalized = ball.velocity.normalize();
             let ff = Vector2::new(
-                0.22 * 9.81 * vel_normalized.x,
-                0.22 * 9.81 * vel_normalized.y,
+                0.50 * 9.81 * vel_normalized.x,
+                0.50 * 9.81 * vel_normalized.y,
             );
 
             ball.velocity.norm() / ff.norm()
@@ -547,7 +547,7 @@ where
         PhysicsAnimator {
             snapshots,
             timer,
-            paused: true,
+            paused: false,
         }
     }
 }

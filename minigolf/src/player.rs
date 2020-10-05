@@ -146,25 +146,6 @@ impl System<MyWorld> for LineDrawer {
             .find(|(e, _)| *e == wall_entity)
             .unwrap();
 
-        if io_state.mouse_buttons[2] {
-            if !self.added_wall {
-                let last = walls.last().unwrap().end.clone();
-                walls.push(Wall {
-                    start: last,
-                    end: na::Point2::new(
-                        io_state.mouse_position[0] as f64,
-                        io_state.mouse_position[1] as f64,
-                    ),
-                });
-
-                dbg!(&walls);
-
-                self.added_wall = true;
-            }
-        } else {
-            self.added_wall = false;
-        }
-
         let mut path_builder = Path::builder();
 
         for wall in walls.iter() {
