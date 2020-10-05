@@ -13,7 +13,7 @@ use mela::ecs::component::Transform;
 use mela::nalgebra::{Point2, Similarity2, Vector2, Isometry3, Isometry2};
 use mela::ecs::world::{World, WorldStorage};
 use std::ops::Mul;
-use std::cell::RefCell;
+use std::cell::{RefCell, Ref};
 use std::borrow::Borrow;
 use mela::gfx::primitives::PrimitiveComponent;
 use mela::gfx::primitives::PrimitiveShape;
@@ -52,6 +52,7 @@ impl Component for BallComponent {}
 pub enum Event {
     BallCollision(usize, usize),
     BallStopped(usize),
+    BallStaticCollision(usize, Vector2<f64>),
 }
 
 #[derive(Clone, Debug)]
@@ -100,6 +101,8 @@ impl Snapshot<f64> {
 
         use mela::itertools::Itertools;
 
+        let walls = self.walls.borrow_mut();
+
         for (i, ball) in self.balls.iter().enumerate() {
             let stop_t = self.ball_stop_time(ball);
 
@@ -109,6 +112,20 @@ impl Snapshot<f64> {
                 events.push(Event::BallStopped(i));
             } else if (stop_t - smallest).abs() <= EVENT_MARGIN {
                 events.push(Event::BallStopped(i));
+            }
+
+            for wall in walls.iter() {
+                if let Some(toi) = self.ball_wall_toi(ball, wall) {
+                    if toi < smallest - EVENT_MARGIN {
+                        println!("new toi {}", toi);
+                        smallest = toi;
+                        events.clear();
+                        events.push(Event::BallStopped(i));
+                    } else {
+                        println!("old toi {}", toi);
+                        events.push(Event::BallStopped(i));
+                    }
+                }
             }
         }
 
@@ -236,7 +253,7 @@ impl Snapshot<f64> {
     }
 
     fn ball_wall_toi(&self, ball: &PhysicsBody<Ball>, wall: &Wall) -> Option<f64> {
-        if wall.start.x == wall.end.x {
+        if (wall.start.x - wall.end.x).abs() <= f64::EPSILON {
             // along y axis
             None
         } else {
@@ -247,10 +264,24 @@ impl Snapshot<f64> {
             let b = k * ball.velocity.x - ball.velocity.y;
             let c = k * ball.position.x - ball.position.y + c;
 
-            let t1 = (-b + (b.powf(2.) - 2. * a * c).sqrt()) / a;
-            let t2 = (-b + (b.powf(2.) - 2. * a * c).sqrt()) / a;
+            if a == 0. {
+                if b == 0. {
+                    None
+                } else {
+                    Some(c / b)
+                }
+            } else {
+                let t1 = (-b + (b.powf(2.) - 2. * a * c).sqrt()) / a;
+                let t2 = (-b - (b.powf(2.) - 2. * a * c).sqrt()) / a;
 
-            None
+                if t1 >= 0. && t1 < t2 {
+                    Some(t1)
+                } else if t2 >= 0. {
+                    Some(t2)
+                } else {
+                    None
+                }
+            }
         }
     }
 
