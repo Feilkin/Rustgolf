@@ -15,6 +15,8 @@ use mela::ecs::world::{World, WorldStorage};
 use std::ops::Mul;
 use std::cell::RefCell;
 use std::borrow::Borrow;
+use mela::gfx::primitives::PrimitiveComponent;
+use mela::gfx::primitives::PrimitiveShape;
 
 const EVENT_MARGIN: f64 = 0.001;
 const COLLISION_MARGIN: f64 = 0.0000000000001;
@@ -417,14 +419,14 @@ impl<N> PhysicsAnimator<N> where N: RealField {
     }
 }
 
-impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transform<f64>> + WorldStorage<BallComponent> {
-    type SystemData<'a> = (Write<'a, Transform<f64>>, Read<'a, BallComponent>);
+impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transform<f64>> + WorldStorage<BallComponent> + WorldStorage<PrimitiveComponent> {
+    type SystemData<'a> = (Write<'a, Transform<f64>>, Read<'a, BallComponent>, Write<'a, PrimitiveComponent>);
 
     fn name(&self) -> &'static str {
         "PhysicsAnimator"
     }
 
-    fn update<'f>(&mut self, (mut transforms, balls): Self::SystemData<'f>, delta: Duration, _io_state: &IoState, _render_ctx: &mut RenderContext, _debug_ctx: &mut DebugContext) -> () {
+    fn update<'f>(&mut self, (mut transforms, balls, mut primitives): Self::SystemData<'f>, delta: Duration, _io_state: &IoState, _render_ctx: &mut RenderContext, _debug_ctx: &mut DebugContext) -> () {
         use mela::imgui::im_str;
         let ui = &_debug_ctx.ui;
 
@@ -452,8 +454,22 @@ impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transfo
                     } = ball;
 
                     if !hidden {
+                        let ball_body = &current_snapshot.balls[*index];
+
                         let (pos, ball) = current_snapshot.ball_pos(*index, *current_time);
-                        transform.0 = Isometry2::translation(pos.x, pos.y);
+                        transform.0 = Isometry2::new(Vector2::new(pos.x, pos.y), 
+                        ball_body.velocity.y.atan2(ball_body.velocity.x));
+
+                        let (_, mut primitive) = primitives.iter_mut().find(|(e, _)| *e == entity).unwrap();
+
+                        let t = current_time.checked_sub(current_snapshot.start_time).unwrap().as_secs_f64();
+                        let v = ball_body.velocity + current_snapshot.ball_acceleration(ball_body) * t;
+
+                        let stretch:  f64 = 1.0 + v.norm() / 1000.0;
+                        let x = ball.radius * stretch;
+                        let y = ball.radius / stretch;
+
+                        primitive.shape = PrimitiveShape::Ball(x as f32, y as f32);
                     }
                 }
             }
