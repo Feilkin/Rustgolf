@@ -17,6 +17,7 @@ mod player;
 mod resources;
 mod states;
 mod world;
+mod api;
 
 fn main() {
     let game = Minigolf::new();

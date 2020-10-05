@@ -1,3 +1,4 @@
+use crate::api::{Player, Putt};
 use crate::physics::{BallComponent, Snapshot, Wall};
 use crate::world::MyWorld;
 use mela::debug::DebugContext;
@@ -11,9 +12,11 @@ use mela::lyon::lyon_algorithms::path::Path;
 use mela::lyon::lyon_tessellation::math::Point;
 use mela::nalgebra as na;
 use mela::nalgebra::Vector2;
+use reqwest::blocking::Client;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct PlayerController {}
@@ -157,5 +160,88 @@ impl System<MyWorld> for LineDrawer {
         }
 
         primitive.shape = PrimitiveShape::Path(path_builder.build());
+    }
+}
+
+pub struct MultiplayerInput {
+    timer: Rc<RefCell<Duration>>,
+    snapshots: Rc<RefCell<Vec<Snapshot<f64>>>>,
+    click_cooldown: Duration,
+    client: Rc<Client>,
+    endpoint: String,
+    game_id: usize,
+    uuid: Uuid,
+}
+
+impl MultiplayerInput {
+    pub fn new(
+        timer: Rc<RefCell<Duration>>,
+        snapshots: Rc<RefCell<Vec<Snapshot<f64>>>>,
+        client: Rc<Client>,
+        endpoint: String,
+        game_id: usize,
+        uuid: Uuid,
+    ) -> MultiplayerInput {
+        MultiplayerInput {
+            timer,
+            snapshots,
+            client,
+            endpoint,
+            game_id,
+            click_cooldown: Duration::new(0, 0),
+            uuid,
+        }
+    }
+}
+
+impl System<MyWorld> for MultiplayerInput {
+    type SystemData<'a> = (
+        Read<'a, PlayerController>,
+        Read<'a, BallComponent>,
+        Read<'a, Transform<f64>>,
+    );
+
+    fn name(&self) -> &'static str {
+        "MultiplayerInput"
+    }
+
+    fn update<'f>(
+        &mut self,
+        (controller, balls, transforms): Self::SystemData<'f>,
+        delta: Duration,
+        io_state: &IoState,
+        render_ctx: &mut RenderContext,
+        debug_ctx: &mut DebugContext,
+    ) -> () {
+        let (entity, _) = controller.iter().next().unwrap();
+        let current_time = self.timer.borrow();
+
+        let ball = balls.fetch(entity).unwrap();
+        let transform = transforms.fetch(entity).unwrap().clone();
+
+        self.click_cooldown += delta;
+
+        if io_state.mouse_buttons[0] && self.click_cooldown >= Duration::new(1, 0) {
+            self.click_cooldown = Duration::new(0, 0);
+
+            let time = self.timer.borrow().clone();
+            let impulse = Vector2::new(
+                io_state.mouse_position[0] as f64,
+                io_state.mouse_position[1] as f64,
+            ) - &transform.0.translation.vector;
+
+            self.client
+                .put(&self.endpoint)
+                .json::<Putt>(&Putt {
+                    id: self.game_id,
+                    player: Player {
+                        uuid: self.uuid.to_hyphenated().to_string(),
+                    },
+                    time,
+                    impulse: impulse.into(),
+                })
+                .send()
+                .unwrap();
+        }
     }
 }

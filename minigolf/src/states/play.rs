@@ -1,7 +1,10 @@
 //! play :)
 
+use crate::api::PublicStates;
 use crate::physics::{Ball, BallComponent, PhysicsAnimator, PhysicsBody, Snapshot, Wall};
 use crate::player::{LineDrawer, PlayerController, PlayerInput, WallComponent};
+use crate::states::multiplay::GameState;
+use crate::states::{walls, Multiplay, Wrapper};
 use crate::world::MyWorld;
 use mela::asset::tilemap::{Orthogonal, Tilemap};
 use mela::debug::{DebugContext, DebugDrawable};
@@ -18,6 +21,7 @@ use mela::state::State;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 pub struct Play {
     world: MyWorld,
@@ -28,77 +32,7 @@ impl Play {
     pub fn new() -> Play {
         let mut timer = Rc::new(RefCell::new(Duration::new(0, 0)));
         let mut snapshots = Vec::new();
-        let walls = Rc::new(RefCell::new(vec![
-            Wall {
-                start: Point2::new(4., 4.),
-                end: Point2::new(4., 716.),
-            },
-            Wall {
-                start: Point2::new(4., 716.),
-                end: Point2::new(1276., 716.),
-            },
-            Wall {
-                start: Point2::new(1276., 716.),
-                end: Point2::new(1276., 4.),
-            },
-            Wall {
-                start: Point2::new(1276., 4.),
-                end: Point2::new(4., 4.),
-            },
-            Wall {
-                start: Point2::new(63.0, 374.0),
-
-                end: Point2::new(383.0, 689.0),
-            },
-            Wall {
-                start: Point2::new(383.0, 689.5),
-                end: Point2::new(826.0, 688.5),
-            },
-            Wall {
-                start: Point2::new(826.0, 689.0),
-                end: Point2::new(1201.0, 314.0),
-            },
-            Wall {
-                start: Point2::new(1201.0, 313.0),
-                end: Point2::new(920.0, 32.0),
-            },
-            Wall {
-                start: Point2::new(920.0, 32.0),
-                end: Point2::new(679.0, 273.0),
-            },
-            Wall {
-                start: Point2::new(679.0, 274.0),
-                end: Point2::new(861.0, 456.0),
-            },
-            Wall {
-                start: Point2::new(861.0, 456.0),
-                end: Point2::new(800.0, 517.0),
-            },
-            Wall {
-                start: Point2::new(799.0, 517.0),
-                end: Point2::new(722.0, 440.0),
-            },
-            Wall {
-                start: Point2::new(722.0, 440.0),
-                end: Point2::new(571.0, 591.0),
-            },
-            Wall {
-                start: Point2::new(570.0, 591.0),
-                end: Point2::new(481.0, 502.0),
-            },
-            Wall {
-                start: Point2::new(481.0, 502.0),
-                end: Point2::new(648.0, 335.0),
-            },
-            Wall {
-                start: Point2::new(648.0, 335.0),
-                end: Point2::new(378.0, 65.0),
-            },
-            Wall {
-                start: Point2::new(377.0, 65.0),
-                end: Point2::new(68.0, 374.0),
-            },
-        ]));
+        let walls = walls();
 
         let mut seed = Snapshot::new(Vec::new(), Rc::clone(&walls));
 
@@ -158,19 +92,10 @@ impl Play {
         snapshots.push(seed);
 
         let mut seed_index = 0;
-
-        println!("Beginning calculation");
-        let start_time = Instant::now();
-
         while let Some(next) = snapshots[seed_index].next_snapshot() {
             snapshots.push(next);
             seed_index += 1;
         }
-
-        println!("Total events: {}", snapshots.len());
-        println!("First event: {:?}", snapshots.first().unwrap().end_time);
-        println!("Last event: {:?}", snapshots.last().unwrap().start_time);
-        println!("Calculations took {:?}", start_time.elapsed());
 
         let snapshots = Rc::new(RefCell::new(snapshots));
 
@@ -192,7 +117,7 @@ impl Play {
 impl DebugDrawable for Play {}
 
 impl State for Play {
-    type Wrapper = Self;
+    type Wrapper = Wrapper;
 
     fn name(&self) -> &str {
         "Play"
@@ -214,7 +139,44 @@ impl State for Play {
         use mela::imgui::im_str;
         ui.text(im_str!("FPS: {:.2}", ui.io().framerate));
 
-        self
+        if ui.button(im_str!("Join random lobby!"), [150., 30.]) {
+            let uuid = Uuid::new_v4();
+            let client = reqwest::blocking::Client::builder()
+                .connect_timeout(Duration::from_millis(500))
+                .build()
+                .unwrap();
+            let resp = client
+                .post("http://minigolf.srvrs.eu")
+                .json(&crate::api::JoinGame {
+                    id: None,
+                    player: crate::api::Player {
+                        uuid: uuid.to_hyphenated().to_string(),
+                    },
+                })
+                .send();
+
+            match resp {
+                Ok(resp) => {
+                    if resp.status() == 200 {
+                        let resp = resp.json::<crate::api::JoinResponse>().unwrap();
+                        let state = match resp.game {
+                            PublicStates::WaitingForPlayers(s) => GameState::Waiting,
+                            PublicStates::Warmup(s) => GameState::Warmup,
+                            _ => unreachable!(),
+                        };
+
+                        return Wrapper::Multiplay(Multiplay::new(client, uuid, resp.id, resp.uid));
+                    } else {
+                        println!("failed to join game try again later");
+                    }
+                }
+                Err(e) => {
+                    println!("{}", e);
+                }
+            }
+        }
+
+        Wrapper::Play(self)
     }
 
     fn redraw(&self, render_ctx: &mut RenderContext, debug_ctx: &mut DebugContext) {

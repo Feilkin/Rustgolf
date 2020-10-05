@@ -10,21 +10,21 @@ use mela;
 use mela::game::{IoState, Playable};
 use mela::state::State;
 
-use crate::states::Play;
+use crate::states::{Play, Wrapper};
 use mela::debug::{DebugContext, DebugDrawable};
 use mela::gfx::RenderContext;
 use mela::winit::event::{ElementState, Event, MouseButton, WindowEvent};
 use mela::winit::event_loop::ControlFlow;
 
 pub(crate) struct Minigolf {
-    state: Play,
+    state: Wrapper,
     io_state: IoState,
 }
 
 impl Minigolf {
     pub fn new() -> Minigolf {
         Minigolf {
-            state: Play::new(),
+            state: Wrapper::Play(Play::new()),
             io_state: Default::default(),
         }
     }
