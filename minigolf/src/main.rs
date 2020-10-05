@@ -16,6 +16,7 @@ mod world;
 mod resources;
 mod components;
 mod physics;
+mod player;
 
 fn main() {
     let game = Minigolf::new();

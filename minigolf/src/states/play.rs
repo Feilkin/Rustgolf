@@ -9,13 +9,15 @@ use mela::game::IoState;
 use std::time::{Duration, Instant};
 use mela::debug::{DebugContext, DebugDrawable};
 use mela::ecs::system::SystemCaller;
-use crate::physics::{BallComponent, PhysicsAnimator, Snapshot, PhysicsBody, Ball};
+use crate::physics::{BallComponent, PhysicsAnimator, Snapshot, PhysicsBody, Ball, Wall};
 use mela::ecs::component::Transform;
 use std::rc::Rc;
 use mela::gfx::primitives::{PrimitiveComponent, PrimitiveShape};
 use mela::ecs::world::World;
 use mela::lyon;
 use mela::nphysics::ncollide2d::na::{Isometry2, Point2, Vector2};
+use crate::player::{PlayerController, PlayerInput, WallComponent, LineDrawer};
+use mela::lyon::algorithms::path::Path;
 
 pub struct Play {
     world: MyWorld,
@@ -24,40 +26,64 @@ pub struct Play {
 
 impl Play {
     pub fn new() -> Play {
+        let mut timer = Rc::new(RefCell::new(Duration::new(0, 0)));
         let mut snapshots = Vec::new();
+        let walls = Rc::new(RefCell::new(vec![
+            Wall {
+                start: Point2::new(10., 10.,),
+                end: Point2::new(10., 700.,),
+            }
+        ]));
 
-        let mut seed = Snapshot::new(Vec::new());
+        let mut seed = Snapshot::new(Vec::new(), Rc::clone(&walls));
 
         let mut world = MyWorld::new()
             .register::<BallComponent>()
             .register::<Transform<f64>>()
-            .register::<PrimitiveComponent>();
+            .register::<PrimitiveComponent>()
+            .register::<PlayerController>()
+            .register::<WallComponent>();
 
-        for i in 0 .. 25 {
+        world = world.add_entity()
+            .with_component(Transform(Isometry2::translation(0., 0.)))
+            .with_component(WallComponent {})
+            .with_component(PrimitiveComponent {
+                color: [1., 0.8, 0., 0.],
+                shape: PrimitiveShape::Path(Path::new())
+            }).build();
+
+        for i in 0 .. 8 {
             let f = i as f64;
-            let x = 300. + f % 5. * 60.;
-            let y = 100. + (f / 5.).floor() * 60.;
+            let k = f % 2.;
+            let x = 300. + f % 3. * 60.;
+            let y = 100. + (f / 3.).floor() * 60. + k * 10.;
 
             seed.balls.push(PhysicsBody {
                 body: Ball {
                     radius: 21.335,
                 },
                 position: Point2::new(x, y),
-                velocity: Vector2::new(-(f % 5. - 2.) * 50., 0.),
+                velocity: Vector2::new(-(f % 3. - 1.) * 50., 0.),
                 acceleration: Vector2::new(0., 0.),
             });
 
-            world = world.add_entity()
+            let mut entity = world.add_entity()
                 .with_component(PrimitiveComponent {
-                    color: [1., 1., 1., 1.],
+                    color: if i == 0 { [0., 1., 1., 1.] } else { [1., 0., 1., 1.] },
                     shape: PrimitiveShape::Ball(21.335)
                 })
                 .with_component(Transform(Isometry2::translation(x, y)))
                 .with_component(BallComponent {
                     index: i,
                     hidden: false
-                })
-                .build();
+                });
+
+            if i == 0 {
+                entity = entity
+                    .with_component(PlayerController {});
+            }
+
+            world = entity.build();
         }
 
         snapshots.push(seed);
@@ -82,7 +108,9 @@ impl Play {
         Play {
             world,
             systems: vec![
-                Box::new(PhysicsAnimator::<f64>::new(Rc::clone(&snapshots))) as Box<dyn SystemCaller<MyWorld>>,
+                Box::new(PhysicsAnimator::<f64>::new(Rc::clone(&snapshots), Rc::clone(&timer))) as Box<dyn SystemCaller<MyWorld>>,
+                Box::new(PlayerInput::new(Rc::clone(&timer), Rc::clone(&snapshots))),
+                Box::new(LineDrawer::new(Rc::clone(&snapshots))),
                 Box::new(mela::gfx::primitives::PrimitiveRenderer::new())
             ]
         }

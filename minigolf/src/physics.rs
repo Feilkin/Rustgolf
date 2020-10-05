@@ -17,7 +17,7 @@ use std::cell::RefCell;
 use std::borrow::Borrow;
 
 const EVENT_MARGIN: f64 = 0.001;
-const COLLISION_MARGIN: f64 = 0.000001;
+const COLLISION_MARGIN: f64 = 0.0000000000001;
 
 #[derive(Clone, Debug)]
 pub struct PhysicsBody<T, N: RealField = f64> {
@@ -25,6 +25,12 @@ pub struct PhysicsBody<T, N: RealField = f64> {
     pub position: na::Point2<N>,
     pub velocity: na::Vector2<N>,
     pub acceleration: na::Vector2<N>
+}
+
+#[derive(Clone, Debug)]
+pub struct Wall<N: RealField = f64> {
+    pub start: Point2<N>,
+    pub end: Point2<N>
 }
 
 #[derive(Clone, Debug)]
@@ -53,16 +59,18 @@ pub struct Snapshot<N: RealField> {
     pub balls: Vec<PhysicsBody<Ball<N>, N>>,
     pub ignore_collisions: Vec<(usize, usize)>,
     pub index: usize,
+    pub walls: Rc<RefCell<Vec<Wall>>>,
 }
 
 impl Snapshot<f64> {
-    pub fn new(balls: Vec<PhysicsBody<Ball<f64>, f64>>) -> Snapshot<f64> {
+    pub fn new(balls: Vec<PhysicsBody<Ball<f64>, f64>>, walls: Rc<RefCell<Vec<Wall<f64>>>>) -> Snapshot<f64> {
         Snapshot {
             start_time: Duration::new(0, 0),
             end_time: Duration::new(u64::MAX, 999_999_999),
             balls,
             ignore_collisions: Vec::new(),
-            index: 0
+            index: 0,
+            walls,
         }
     }
 
@@ -128,8 +136,6 @@ impl Snapshot<f64> {
             }
         }
 
-        println!("---");
-
         if smallest < std::f64::INFINITY {
             self.end_time = self.start_time + Duration::from_secs_f64(smallest);
             let mut new = self.advance_to(smallest);
@@ -148,7 +154,6 @@ impl Snapshot<f64> {
                     }
                     _ => {}
                 }
-                println!("{:?}", event);
             }
 
             Some(new)
@@ -157,7 +162,7 @@ impl Snapshot<f64> {
         }
     }
 
-    fn advance_to(&self, t: f64) -> Snapshot<f64> {
+    pub fn advance_to(&self, t: f64) -> Snapshot<f64> {
         let mut new_balls = Vec::with_capacity(self.balls.len());
 
         for ball in &self.balls {
@@ -181,7 +186,8 @@ impl Snapshot<f64> {
             end_time: Duration::new(u64::MAX, 999_999_999),
             balls: new_balls,
             index: self.index + 1,
-            ignore_collisions: Vec::new()
+            ignore_collisions: Vec::new(),
+            walls: Rc::clone(&self.walls),
         }
     }
 
@@ -224,6 +230,25 @@ impl Snapshot<f64> {
             let ff = Vector2::new(0.22 * 9.81 * vel_normalized.x, 0.22 * 9.81 * vel_normalized.y);
 
             ball.acceleration.clone_owned() - ff
+        }
+    }
+
+    fn ball_wall_toi(&self, ball: &PhysicsBody<Ball>, wall: &Wall) -> Option<f64> {
+        if wall.start.x == wall.end.x {
+            // along y axis
+            None
+        } else {
+            let k = (&wall.end - &wall.start).norm();
+            let c = wall.start.y - wall.start.x * k;
+            let acc = self.ball_acceleration(ball);
+            let a = acc.x * k - acc.y;
+            let b = k * ball.velocity.x - ball.velocity.y;
+            let c = k * ball.position.x - ball.position.y + c;
+
+            let t1 = (-b + (b.powf(2.) - 2. * a * c).sqrt()) / a;
+            let t2 = (-b + (b.powf(2.) - 2. * a * c).sqrt()) / a;
+
+            None
         }
     }
 
@@ -275,7 +300,7 @@ impl Snapshot<f64> {
             let mut smallest = None;
 
             for t in &[t1, t2] {
-                if t.im.abs() <= 0.01 && (t.re >= 0. || t.re.abs() <= COLLISION_MARGIN) {
+                if t.im.abs() <= 0.0001 && (t.re >= 0. || t.re.abs() <= COLLISION_MARGIN) {
                     if smallest.is_none() {
                         smallest = Some(t.re.max(0.));
                     } else if t.re <= smallest.unwrap() {
@@ -363,7 +388,7 @@ impl Snapshot<f64> {
         let mut smallest = None;
 
         for t in &[t1, t2, t3, t4] {
-            if t.im.abs() <= 0.01 && (t.re >= 0. || t.re.abs() <= COLLISION_MARGIN) {
+            if t.im.abs() <= 0.0001 && (t.re >= 0. || t.re.abs() <= COLLISION_MARGIN) {
                 if smallest.is_none() {
                     smallest = Some(t.re.max(0.));
                 } else if t.re <= smallest.unwrap() {
@@ -378,15 +403,15 @@ impl Snapshot<f64> {
 
 pub struct PhysicsAnimator<N: RealField> {
     snapshots: Rc<RefCell<Vec<Snapshot<N>>>>,
-    timer: Duration,
+    timer: Rc<RefCell<Duration>>,
     paused: bool,
 }
 
 impl<N> PhysicsAnimator<N> where N: RealField {
-    pub fn new(snapshots: Rc<RefCell<Vec<Snapshot<N>>>>) -> PhysicsAnimator<N> {
+    pub fn new(snapshots: Rc<RefCell<Vec<Snapshot<N>>>>, timer: Rc<RefCell<Duration>>) -> PhysicsAnimator<N> {
         PhysicsAnimator {
             snapshots,
-            timer: Duration::new(0, 0),
+            timer,
             paused: true
         }
     }
@@ -403,18 +428,17 @@ impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transfo
         use mela::imgui::im_str;
         let ui = &_debug_ctx.ui;
 
-        let mut current_time = self.timer;
+        let mut current_time = self.timer.borrow_mut();
 
         if !self.paused {
-            current_time += delta;
-            self.timer = current_time;
+            *current_time += delta;
         }
 
         if let Some(current_snapshot) = {
             let snapshots = (*self.snapshots).borrow();
             let mut found = None;
             for snapshot in &*snapshots {
-                if snapshot.end_time >= current_time { found = Some(snapshot.clone()); break }
+                if snapshot.end_time >= *current_time { found = Some(snapshot.clone()); break }
             }
 
             found
@@ -428,13 +452,15 @@ impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transfo
                     } = ball;
 
                     if !hidden {
-                        let (pos, ball) = current_snapshot.ball_pos(*index, current_time);
+                        let (pos, ball) = current_snapshot.ball_pos(*index, *current_time);
                         transform.0 = Isometry2::translation(pos.x, pos.y);
                     }
                 }
             }
 
-            self.timer = current_time;
+            if current_snapshot.end_time >= Duration::new(u64::MAX, 0) {
+                *current_time = Duration::new(0, 0);
+            }
         }
 
 
@@ -442,22 +468,20 @@ impl<W> System<W> for PhysicsAnimator<f64> where W: World + WorldStorage<Transfo
             if ui.button(im_str!("Paused"), [80., 25.]) {
                 self.paused = false;
             }
-            let mut temp = self.timer.as_secs_f32();
-            let max = temp * 2.;
+            let mut temp = current_time.as_secs_f32();
 
             if ui.drag_float(im_str!("Timer"), &mut temp)
                 .speed(0.1)
                 .min(0.)
-                .max(max)
                 .build() {
 
-                self.timer = Duration::from_secs_f32(temp.max(0.));
+                *current_time = Duration::from_secs_f32(temp.max(0.));
             }
         } else {
             if ui.button(im_str!("Running"), [80., 25.]) {
                 self.paused = true;
             }
-            ui.text(im_str!("Timer: {:?}", &self.timer));
+            ui.text(im_str!("Timer: {:?}", &current_time));
         }
     }
 }

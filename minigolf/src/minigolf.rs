@@ -70,7 +70,6 @@ impl Playable for Minigolf {
                     },
                 ..
             } => {
-
                 let button_num = match button {
                     MouseButton::Left => 0,
                     MouseButton::Right => 1,
