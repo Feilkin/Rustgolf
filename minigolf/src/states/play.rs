@@ -2,7 +2,7 @@
 
 use crate::api::PublicStates;
 use crate::physics::{Ball, BallComponent, PhysicsAnimator, PhysicsBody, Snapshot, Wall};
-use crate::player::{LineDrawer, PlayerController, PlayerInput, WallComponent};
+use crate::player::{HitIndicator, LineDrawer, PlayerController, PlayerInput, WallComponent};
 use crate::states::multiplay::GameState;
 use crate::states::{walls, Multiplay, Wrapper};
 use crate::world::MyWorld;
@@ -41,6 +41,7 @@ impl Play {
             .register::<Transform<f64>>()
             .register::<PrimitiveComponent>()
             .register::<PlayerController>()
+            .register::<HitIndicator>()
             .register::<WallComponent>();
 
         world = world
@@ -48,7 +49,14 @@ impl Play {
             .with_component(Transform(Isometry2::translation(0., 0.)))
             .with_component(WallComponent {})
             .with_component(PrimitiveComponent {
-                color: [0., 0.2, 1., 0.],
+                color: [0., 0.2, 1., 1.],
+                shape: PrimitiveShape::Path(Path::new()),
+            })
+            .add_entity()
+            .with_component(Transform(Isometry2::translation(0., 0.)))
+            .with_component(HitIndicator {})
+            .with_component(PrimitiveComponent {
+                color: [1., 1., 1., 1.],
                 shape: PrimitiveShape::Path(Path::new()),
             })
             .build();

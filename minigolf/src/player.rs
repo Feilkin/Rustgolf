@@ -1,4 +1,4 @@
-use crate::api::{Player, Putt};
+use crate::api::{Player, PublicPlay, PublicStates, Putt};
 use crate::physics::{BallComponent, Snapshot, Wall};
 use crate::world::MyWorld;
 use mela::debug::DebugContext;
@@ -37,11 +37,18 @@ impl PlayerInput {
     }
 }
 
+#[derive(Debug)]
+pub struct HitIndicator {}
+
+impl Component for HitIndicator {}
+
 impl System<MyWorld> for PlayerInput {
     type SystemData<'a> = (
         Read<'a, PlayerController>,
         Read<'a, BallComponent>,
         Read<'a, Transform<f64>>,
+        Read<'a, HitIndicator>,
+        Write<'a, PrimitiveComponent>,
     );
 
     fn name(&self) -> &'static str {
@@ -50,7 +57,7 @@ impl System<MyWorld> for PlayerInput {
 
     fn update<'f>(
         &mut self,
-        (controller, balls, transforms): Self::SystemData<'f>,
+        (controller, balls, transforms, indicators, mut primitives): Self::SystemData<'f>,
         delta: Duration,
         io_state: &IoState,
         render_ctx: &mut RenderContext,
@@ -62,12 +69,28 @@ impl System<MyWorld> for PlayerInput {
         let ball = balls.fetch(entity).unwrap();
         let transform = transforms.fetch(entity).unwrap().clone();
 
-        if io_state.mouse_buttons[0] {
-            let impulse = Vector2::new(
-                io_state.mouse_position[0] as f64,
-                io_state.mouse_position[1] as f64,
-            ) - &transform.0.translation.vector;
+        let impulse = Vector2::new(
+            io_state.mouse_position[0] as f64,
+            io_state.mouse_position[1] as f64,
+        ) - &transform.0.translation.vector;
 
+        let (indicator_entity, _) = indicators.iter().next().unwrap();
+        let (_, indicator_prim) = primitives
+            .iter_mut()
+            .find(|(e, _)| *e == indicator_entity)
+            .unwrap();
+
+        let start_point_vec = &transform.0.translation.vector + impulse.normalize() * 30.;
+        let start_point = Point::new(start_point_vec.x as f32, start_point_vec.y as f32);
+        let end_point = Point::new(io_state.mouse_position[0], io_state.mouse_position[1]);
+
+        let mut path = Path::builder();
+        path.move_to(start_point);
+        path.line_to(end_point);
+
+        indicator_prim.shape = PrimitiveShape::Path(path.build());
+
+        if io_state.mouse_buttons[0] {
             if let Some(snapshot_index) = {
                 let snapshots = (*self.snapshots).borrow();
                 let mut found = None;
@@ -166,6 +189,7 @@ impl System<MyWorld> for LineDrawer {
 pub struct MultiplayerInput {
     timer: Rc<RefCell<Duration>>,
     snapshots: Rc<RefCell<Vec<Snapshot<f64>>>>,
+    initial_snapshot: Snapshot<f64>,
     click_cooldown: Duration,
     client: Rc<Client>,
     endpoint: String,
@@ -177,6 +201,7 @@ impl MultiplayerInput {
     pub fn new(
         timer: Rc<RefCell<Duration>>,
         snapshots: Rc<RefCell<Vec<Snapshot<f64>>>>,
+        initial_snapshot: Snapshot<f64>,
         client: Rc<Client>,
         endpoint: String,
         game_id: usize,
@@ -185,6 +210,7 @@ impl MultiplayerInput {
         MultiplayerInput {
             timer,
             snapshots,
+            initial_snapshot,
             client,
             endpoint,
             game_id,
@@ -199,6 +225,8 @@ impl System<MyWorld> for MultiplayerInput {
         Read<'a, PlayerController>,
         Read<'a, BallComponent>,
         Read<'a, Transform<f64>>,
+        Read<'a, HitIndicator>,
+        Write<'a, PrimitiveComponent>,
     );
 
     fn name(&self) -> &'static str {
@@ -207,7 +235,7 @@ impl System<MyWorld> for MultiplayerInput {
 
     fn update<'f>(
         &mut self,
-        (controller, balls, transforms): Self::SystemData<'f>,
+        (controller, balls, transforms, indicators, mut primitives): Self::SystemData<'f>,
         delta: Duration,
         io_state: &IoState,
         render_ctx: &mut RenderContext,
@@ -221,27 +249,93 @@ impl System<MyWorld> for MultiplayerInput {
 
         self.click_cooldown += delta;
 
-        if io_state.mouse_buttons[0] && self.click_cooldown >= Duration::new(1, 0) {
-            self.click_cooldown = Duration::new(0, 0);
+        let (indicator_entity, _) = indicators.iter().next().unwrap();
+        let (_, indicator_prim) = primitives
+            .iter_mut()
+            .find(|(e, _)| *e == indicator_entity)
+            .unwrap();
 
-            let time = self.timer.borrow().clone();
+        if self.click_cooldown >= Duration::new(1, 0) {
             let impulse = Vector2::new(
                 io_state.mouse_position[0] as f64,
                 io_state.mouse_position[1] as f64,
             ) - &transform.0.translation.vector;
 
-            self.client
-                .put(&self.endpoint)
-                .json::<Putt>(&Putt {
-                    id: self.game_id,
-                    player: Player {
-                        uuid: self.uuid.to_hyphenated().to_string(),
-                    },
-                    time,
-                    impulse: impulse.into(),
-                })
-                .send()
-                .unwrap();
+            let start_point_vec = &transform.0.translation.vector + impulse.normalize() * 30.;
+            let start_point = Point::new(start_point_vec.x as f32, start_point_vec.y as f32);
+            let end_point = Point::new(io_state.mouse_position[0], io_state.mouse_position[1]);
+
+            let mut path = Path::builder();
+            path.move_to(start_point);
+            path.line_to(end_point);
+
+            indicator_prim.shape = PrimitiveShape::Path(path.build());
+
+            if io_state.mouse_buttons[0] {
+                self.click_cooldown = Duration::new(0, 0);
+
+                let time = self.timer.borrow().clone();
+
+                let resp = self
+                    .client
+                    .put(&self.endpoint)
+                    .json::<Putt>(&Putt {
+                        id: self.game_id,
+                        player: Player {
+                            uuid: self.uuid.to_hyphenated().to_string(),
+                        },
+                        time,
+                        impulse: impulse.into(),
+                    })
+                    .send()
+                    .unwrap()
+                    .json::<PublicStates>();
+
+                match resp {
+                    Ok(PublicStates::Play(mut state)) => {
+                        let mut snapshots = vec![self.initial_snapshot.clone()];
+
+                        state.puts.sort_by(|a, b| a.time.cmp(&b.time));
+
+                        for putt in state.puts {
+                            let (i, snapshot) = snapshots
+                                .iter_mut()
+                                .enumerate()
+                                .find(|(_, s)| s.end_time > putt.time)
+                                .unwrap();
+
+                            snapshot.end_time = putt.time.clone();
+                            let mut new = snapshot
+                                .advance_to((putt.time - snapshot.start_time).as_secs_f64());
+
+                            new.ignore_collisions = snapshot.ignore_collisions.clone();
+
+                            new.balls[putt.player.id].velocity = putt.impulse.into();
+
+                            let mut new_snapshots: Vec<Snapshot<f64>> =
+                                snapshots[..=i].iter().cloned().collect();
+                            new_snapshots.push(new);
+
+                            let mut seed_index = i + 1;
+
+                            while let Some(next) = new_snapshots[seed_index].next_snapshot() {
+                                new_snapshots.push(next);
+                                seed_index += 1;
+                            }
+
+                            snapshots = new_snapshots;
+                        }
+
+                        {
+                            let mut lock = self.snapshots.borrow_mut();
+                            *lock = snapshots;
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        } else {
+            indicator_prim.shape = PrimitiveShape::Path(Path::new())
         }
     }
 }

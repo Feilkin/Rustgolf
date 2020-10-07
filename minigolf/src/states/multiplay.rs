@@ -1,6 +1,8 @@
 use crate::api::{GetUpdate, PublicStates};
 use crate::physics::{Ball, BallComponent, PhysicsAnimator, PhysicsBody, Snapshot, Wall};
-use crate::player::{LineDrawer, MultiplayerInput, PlayerController, PlayerInput, WallComponent};
+use crate::player::{
+    HitIndicator, LineDrawer, MultiplayerInput, PlayerController, PlayerInput, WallComponent,
+};
 use crate::states::{walls, Play, Wrapper};
 use crate::world::MyWorld;
 use mela::debug::{DebugContext, DebugDrawable};
@@ -11,6 +13,7 @@ use mela::ecs::System;
 use mela::game::IoState;
 use mela::gfx::primitives::{PrimitiveComponent, PrimitiveShape};
 use mela::gfx::RenderContext;
+use mela::itertools::Itertools;
 use mela::lyon::lyon_algorithms::path::Path;
 use mela::nalgebra::{Isometry2, Point2, Vector2};
 use mela::state::State;
@@ -60,6 +63,7 @@ impl Multiplay {
             .register::<Transform<f64>>()
             .register::<PrimitiveComponent>()
             .register::<PlayerController>()
+            .register::<HitIndicator>()
             .register::<WallComponent>();
 
         world = world
@@ -75,6 +79,13 @@ impl Multiplay {
             .with_component(PrimitiveComponent {
                 color: [0.3, 1., 0.3, 1.],
                 shape: PrimitiveShape::Ball(100., 100.),
+            })
+            .add_entity()
+            .with_component(Transform(Isometry2::translation(0., 0.)))
+            .with_component(HitIndicator {})
+            .with_component(PrimitiveComponent {
+                color: [1., 1., 1., 1.],
+                shape: PrimitiveShape::Path(Path::new()),
             })
             .build();
 
@@ -144,11 +155,12 @@ impl Multiplay {
                     Rc::clone(&client),
                     uuid.clone(),
                     Rc::clone(&snapshots),
-                    initial_snapshot,
+                    initial_snapshot.clone(),
                 )),
                 Box::new(MultiplayerInput::new(
                     Rc::clone(&timer),
                     Rc::clone(&snapshots),
+                    initial_snapshot,
                     Rc::clone(&client),
                     "http://minigolf.srvrs.eu".to_owned(),
                     game_id,
@@ -291,11 +303,13 @@ impl System<MyWorld> for PollerSystem {
                         *our_state = match state {
                             PublicStates::WaitingForPlayers(_) => GameState::Waiting,
                             PublicStates::Warmup(_) => GameState::Warmup,
-                            PublicStates::Play(state) => {
+                            PublicStates::Play(mut state) => {
                                 if state.puts.len() != self.last_put_count {
                                     self.last_put_count = state.puts.len();
 
                                     let mut snapshots = vec![self.initial_snapshot.clone()];
+
+                                    state.puts.sort_by(|a, b| a.time.cmp(&b.time));
 
                                     for putt in state.puts {
                                         let (i, snapshot) = snapshots

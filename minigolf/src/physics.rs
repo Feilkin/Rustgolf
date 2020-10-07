@@ -126,11 +126,7 @@ impl Snapshot<f64> {
                     let n1 = Vector2::new(-delta.y, delta.x).normalize();
                     let n2 = Vector2::new(delta.y, -delta.x).normalize();
 
-                    let n = if n1.angle(&ball.velocity) >= n2.angle(&ball.velocity) {
-                        n1
-                    } else {
-                        n2
-                    };
+                    let n = n2;
 
                     if toi < smallest - EVENT_MARGIN {
                         if self.ignore_wall_collisions.contains(&(i, j)) {
