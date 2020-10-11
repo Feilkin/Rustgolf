@@ -15,7 +15,7 @@ use mela::nalgebra::Vector2;
 use reqwest::blocking::Client;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 #[derive(Clone, Debug)]
@@ -103,6 +103,7 @@ impl System<MyWorld> for PlayerInput {
 
                 found
             } {
+                let start_time = Instant::now();
                 let mut snapshots = self.snapshots.borrow_mut();
                 let mut current_snapshot = &mut snapshots[snapshot_index];
                 current_snapshot.end_time = current_time.clone();
@@ -122,6 +123,8 @@ impl System<MyWorld> for PlayerInput {
                     new_snapshots.push(next);
                     seed_index += 1;
                 }
+
+                println!("physics calculations took {:?}", start_time.elapsed());
 
                 *snapshots = new_snapshots;
             }

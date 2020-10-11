@@ -1261,6 +1261,7 @@ version = "0.1.0"
 dependencies = [
  "mela",
  "num",
+ "rayon",
  "reqwest",
  "serde",
  "uuid",

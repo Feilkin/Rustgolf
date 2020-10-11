@@ -61,14 +61,16 @@ impl Play {
             })
             .build();
 
-        for i in 0..8 {
+        let radius = 3.1335;
+
+        for i in 0..625 {
             let f = i as f64;
             let k = f % 2.;
-            let x = 300. + f % 3. * 60.;
-            let y = 200. + (f / 3.).floor() * 60. + k * 10.;
+            let x = 300. + f % 25. * radius * 3.;
+            let y = 200. + (f / 25.).floor() * radius * 3. + k * radius * 0.3;
 
             seed.balls.push(PhysicsBody {
-                body: Ball { radius: 21.335 },
+                body: Ball { radius },
                 position: Point2::new(x, y),
                 velocity: Vector2::new(0., 0.),
                 acceleration: Vector2::new(0., 0.),
@@ -82,7 +84,7 @@ impl Play {
                     } else {
                         [1., 0., 1., 1.]
                     },
-                    shape: PrimitiveShape::Ball(21.335, 21.335),
+                    shape: PrimitiveShape::Ball(radius as f32, radius as f32),
                 })
                 .with_component(Transform(Isometry2::translation(x, y)))
                 .with_component(BallComponent {

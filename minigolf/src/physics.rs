@@ -9,9 +9,11 @@ use mela::game::IoState;
 use mela::gfx::primitives::PrimitiveComponent;
 use mela::gfx::primitives::PrimitiveShape;
 use mela::gfx::RenderContext;
+use mela::itertools::Itertools;
 use mela::nalgebra as na;
 use mela::nalgebra::{Isometry2, Isometry3, Point2, Similarity2, Vector2};
 use mela::nphysics::ncollide2d::simba::scalar::RealField;
+use rayon::prelude::*;
 use std::borrow::Borrow;
 use std::cell::{Ref, RefCell};
 use std::ops::Mul;
@@ -86,7 +88,7 @@ impl Snapshot<f64> {
         let body = &self.balls[ball_index];
         let delta = (t - self.start_time).as_secs_f64();
 
-        let acc = self.ball_acceleration(body);
+        let acc = Self::ball_acceleration(body);
 
         let x = &body.position.x + &body.velocity.x * delta + 0.5 * &acc.x * delta.powf(2.);
         let y = &body.position.y + &body.velocity.y * delta + 0.5 * &acc.y * delta.powf(2.);
@@ -150,34 +152,86 @@ impl Snapshot<f64> {
             }
         }
 
-        for ((i, ball), (j, other)) in self.balls.iter().enumerate().tuple_combinations() {
-            let toi = self.ball_ball_toi(ball, other);
+        let ball_pairs: Vec<((usize, &PhysicsBody<Ball>), (usize, &PhysicsBody<Ball>))> = self
+            .balls
+            .iter()
+            .enumerate()
+            .tuple_combinations()
+            .collect_vec();
 
-            if let Some(toi) = toi {
-                if toi < smallest - EVENT_MARGIN {
-                    if self.ignore_collisions.contains(&(i, j))
-                        || self.ignore_collisions.contains(&(j, i))
-                    {
-                        ignored.push((i, j));
-                        continue;
+        let mut tois: Vec<(f64, &usize, &usize)> = ball_pairs
+            .par_iter()
+            .map(|((i, ball), (j, other))| {
+                Self::ball_ball_toi(ball, other).and_then(|toi| Some((toi, i, j)))
+            })
+            .filter_map(|pair| {
+                pair.and_then(|pair| {
+                    if pair.0.is_finite() && pair.0 >= -EVENT_MARGIN {
+                        Some(pair)
                     } else {
-                        smallest = toi;
-                        ignored.clear();
-                        events.clear();
-                        events.push(Event::BallCollision(i, j));
+                        None
                     }
-                } else if (toi - smallest).abs() <= EVENT_MARGIN {
-                    if self.ignore_collisions.contains(&(i, j))
-                        || self.ignore_collisions.contains(&(j, i))
-                    {
-                        ignored.push((i, j));
-                        continue;
-                    } else {
-                        events.push(Event::BallCollision(i, j));
-                    }
+                })
+            })
+            .collect();
+
+        tois.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+        for (toi, i, j) in tois {
+            if toi > smallest + EVENT_MARGIN {
+                break;
+            }
+
+            if toi < smallest - EVENT_MARGIN {
+                if self.ignore_collisions.contains(&(*i, *j))
+                    || self.ignore_collisions.contains(&(*j, *i))
+                {
+                    ignored.push((*i, *j));
+                } else {
+                    smallest = toi;
+                    ignored.clear();
+                    events.clear();
+                    events.push(Event::BallCollision(*i, *j));
+                }
+            } else {
+                if self.ignore_collisions.contains(&(*i, *j))
+                    || self.ignore_collisions.contains(&(*j, *i))
+                {
+                    ignored.push((*i, *j));
+                } else {
+                    events.push(Event::BallCollision(*i, *j));
                 }
             }
         }
+
+        // for ((i, ball), (j, other)) in self.balls.iter().enumerate().tuple_combinations() {
+        //     let toi = Self::ball_ball_toi(ball, other);
+        //
+        //     if let Some(toi) = toi {
+        //         if toi < smallest - EVENT_MARGIN {
+        //             if self.ignore_collisions.contains(&(i, j))
+        //                 || self.ignore_collisions.contains(&(j, i))
+        //             {
+        //                 ignored.push((i, j));
+        //                 continue;
+        //             } else {
+        //                 smallest = toi;
+        //                 ignored.clear();
+        //                 events.clear();
+        //                 events.push(Event::BallCollision(i, j));
+        //             }
+        //         } else if (toi - smallest).abs() <= EVENT_MARGIN {
+        //             if self.ignore_collisions.contains(&(i, j))
+        //                 || self.ignore_collisions.contains(&(j, i))
+        //             {
+        //                 ignored.push((i, j));
+        //                 continue;
+        //             } else {
+        //                 events.push(Event::BallCollision(i, j));
+        //             }
+        //         }
+        //     }
+        // }
 
         smallest = smallest.max(0.);
 
@@ -222,7 +276,7 @@ impl Snapshot<f64> {
         let mut new_balls = Vec::with_capacity(self.balls.len());
 
         for ball in &self.balls {
-            let acc = self.ball_acceleration(ball);
+            let acc = Self::ball_acceleration(ball);
             let mut new_velocity =
                 Vector2::new(ball.velocity.x + &acc.x * t, ball.velocity.y + &acc.y * t);
 
@@ -287,7 +341,7 @@ impl Snapshot<f64> {
         }
     }
 
-    fn ball_acceleration(&self, ball: &PhysicsBody<Ball>) -> Vector2<f64> {
+    fn ball_acceleration(ball: &PhysicsBody<Ball>) -> Vector2<f64> {
         if ball.velocity.norm_squared() <= 1.0 {
             Vector2::new(0., 0.)
         } else {
@@ -308,7 +362,7 @@ impl Snapshot<f64> {
         } else {
             let k = (&wall.end.y - &wall.start.y) / (&wall.end.x - &wall.start.x);
             let c = wall.start.y - wall.start.x * k;
-            let acc = self.ball_acceleration(ball);
+            let acc = Self::ball_acceleration(ball);
             let a = acc.x * k - acc.y;
             let b = k * ball.velocity.x - ball.velocity.y;
             let c = k * ball.position.x - ball.position.y + c;
@@ -346,7 +400,7 @@ impl Snapshot<f64> {
 
     fn ball_wall_toi(&self, ball: &PhysicsBody<Ball>, wall: &Wall) -> Option<f64> {
         if let Some(toi) = self.ball_line_toi(ball, wall) {
-            let acc = self.ball_acceleration(ball);
+            let acc = Self::ball_acceleration(ball);
             let impact_pos = &ball.position + &ball.velocity * toi + 0.5 * acc * toi.powf(2.);
 
             let x1 = wall.start.x.min(wall.end.x);
@@ -365,10 +419,10 @@ impl Snapshot<f64> {
         }
     }
 
-    fn ball_ball_toi(&self, ball: &PhysicsBody<Ball>, other: &PhysicsBody<Ball>) -> Option<f64> {
+    fn ball_ball_toi(ball: &PhysicsBody<Ball>, other: &PhysicsBody<Ball>) -> Option<f64> {
         use num::Complex;
 
-        let acc = self.ball_acceleration(ball);
+        let acc = Self::ball_acceleration(ball);
         let (a1x, a1y) = (Complex::new(acc.x, 0.), Complex::new(acc.y, 0.));
         let (v1x, v1y) = (
             Complex::new(ball.velocity.x, 0.),
@@ -379,7 +433,7 @@ impl Snapshot<f64> {
             Complex::new(ball.position.y, 0.),
         );
 
-        let other_acc = self.ball_acceleration(other);
+        let other_acc = Self::ball_acceleration(other);
         let (a2x, a2y) = (Complex::new(other_acc.x, 0.), Complex::new(other_acc.y, 0.));
         let (v2x, v2y) = (
             Complex::new(other.velocity.x, 0.),
@@ -620,8 +674,7 @@ where
                             .checked_sub(current_snapshot.start_time)
                             .unwrap()
                             .as_secs_f64();
-                        let v =
-                            ball_body.velocity + current_snapshot.ball_acceleration(ball_body) * t;
+                        let v = ball_body.velocity + Snapshot::ball_acceleration(ball_body) * t;
 
                         let stretch: f64 = 1.0 + v.norm() / 1000.0;
                         let x = ball.radius * stretch;

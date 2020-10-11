@@ -12,3 +12,4 @@ num = "0.3.0"
 reqwest = {version = "0.10", features = ["blocking", "json"]}
 uuid = { version = "0.8.1", features = ["v4"]}
 serde = "1.0.116"
+rayon = "1.4"
