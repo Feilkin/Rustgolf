@@ -14,7 +14,6 @@ use mela::itertools::Itertools;
 use mela::nalgebra as na;
 use mela::nalgebra::{Isometry2, Isometry3, Point2, Similarity2, Vector2};
 use mela::nphysics::ncollide2d::simba::scalar::RealField;
-use rayon::prelude::*;
 use std::borrow::Borrow;
 use std::cell::{Ref, RefCell};
 use std::ops::Mul;
@@ -153,86 +152,86 @@ impl Snapshot<f64> {
             }
         }
 
-        let ball_pairs: Vec<((usize, &PhysicsBody<Ball>), (usize, &PhysicsBody<Ball>))> = self
-            .balls
-            .iter()
-            .enumerate()
-            .tuple_combinations()
-            .collect_vec();
-
-        let mut tois: Vec<(f64, &usize, &usize)> = ball_pairs
-            .par_iter()
-            .map(|((i, ball), (j, other))| {
-                Self::ball_ball_toi(ball, other).and_then(|toi| Some((toi, i, j)))
-            })
-            .filter_map(|pair| {
-                pair.and_then(|pair| {
-                    if pair.0.is_finite() && pair.0 >= -EVENT_MARGIN {
-                        Some(pair)
-                    } else {
-                        None
-                    }
-                })
-            })
-            .collect();
-
-        tois.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-
-        for (toi, i, j) in tois {
-            if toi > smallest + EVENT_MARGIN {
-                break;
-            }
-
-            if toi < smallest - EVENT_MARGIN {
-                if self.ignore_collisions.contains(&(*i, *j))
-                    || self.ignore_collisions.contains(&(*j, *i))
-                {
-                    ignored.push((*i, *j));
-                } else {
-                    smallest = toi;
-                    ignored.clear();
-                    events.clear();
-                    events.push(Event::BallCollision(*i, *j));
-                }
-            } else {
-                if self.ignore_collisions.contains(&(*i, *j))
-                    || self.ignore_collisions.contains(&(*j, *i))
-                {
-                    ignored.push((*i, *j));
-                } else {
-                    events.push(Event::BallCollision(*i, *j));
-                }
-            }
-        }
-
-        // for ((i, ball), (j, other)) in self.balls.iter().enumerate().tuple_combinations() {
-        //     let toi = Self::ball_ball_toi(ball, other);
+        // let ball_pairs: Vec<((usize, &PhysicsBody<Ball>), (usize, &PhysicsBody<Ball>))> = self
+        //     .balls
+        //     .iter()
+        //     .enumerate()
+        //     .tuple_combinations()
+        //     .collect_vec();
         //
-        //     if let Some(toi) = toi {
-        //         if toi < smallest - EVENT_MARGIN {
-        //             if self.ignore_collisions.contains(&(i, j))
-        //                 || self.ignore_collisions.contains(&(j, i))
-        //             {
-        //                 ignored.push((i, j));
-        //                 continue;
+        // let mut tois: Vec<(f64, &usize, &usize)> = ball_pairs
+        //     .iter()
+        //     .map(|((i, ball), (j, other))| {
+        //         Self::ball_ball_toi(ball, other).and_then(|toi| Some((toi, i, j)))
+        //     })
+        //     .filter_map(|pair| {
+        //         pair.and_then(|pair| {
+        //             if pair.0.is_finite() && pair.0 >= -EVENT_MARGIN {
+        //                 Some(pair)
         //             } else {
-        //                 smallest = toi;
-        //                 ignored.clear();
-        //                 events.clear();
-        //                 events.push(Event::BallCollision(i, j));
+        //                 None
         //             }
-        //         } else if (toi - smallest).abs() <= EVENT_MARGIN {
-        //             if self.ignore_collisions.contains(&(i, j))
-        //                 || self.ignore_collisions.contains(&(j, i))
-        //             {
-        //                 ignored.push((i, j));
-        //                 continue;
-        //             } else {
-        //                 events.push(Event::BallCollision(i, j));
-        //             }
+        //         })
+        //     })
+        //     .collect();
+        //
+        // tois.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        //
+        // for (toi, i, j) in tois {
+        //     if toi > smallest + EVENT_MARGIN {
+        //         break;
+        //     }
+        //
+        //     if toi < smallest - EVENT_MARGIN {
+        //         if self.ignore_collisions.contains(&(*i, *j))
+        //             || self.ignore_collisions.contains(&(*j, *i))
+        //         {
+        //             ignored.push((*i, *j));
+        //         } else {
+        //             smallest = toi;
+        //             ignored.clear();
+        //             events.clear();
+        //             events.push(Event::BallCollision(*i, *j));
+        //         }
+        //     } else {
+        //         if self.ignore_collisions.contains(&(*i, *j))
+        //             || self.ignore_collisions.contains(&(*j, *i))
+        //         {
+        //             ignored.push((*i, *j));
+        //         } else {
+        //             events.push(Event::BallCollision(*i, *j));
         //         }
         //     }
         // }
+
+        for ((i, ball), (j, other)) in self.balls.iter().enumerate().tuple_combinations() {
+            let toi = Self::ball_ball_toi(ball, other);
+
+            if let Some(toi) = toi {
+                if toi < smallest - EVENT_MARGIN {
+                    if self.ignore_collisions.contains(&(i, j))
+                        || self.ignore_collisions.contains(&(j, i))
+                    {
+                        ignored.push((i, j));
+                        continue;
+                    } else {
+                        smallest = toi;
+                        ignored.clear();
+                        events.clear();
+                        events.push(Event::BallCollision(i, j));
+                    }
+                } else if (toi - smallest).abs() <= EVENT_MARGIN {
+                    if self.ignore_collisions.contains(&(i, j))
+                        || self.ignore_collisions.contains(&(j, i))
+                    {
+                        ignored.push((i, j));
+                        continue;
+                    } else {
+                        events.push(Event::BallCollision(i, j));
+                    }
+                }
+            }
+        }
 
         smallest = smallest.max(0.);
 
