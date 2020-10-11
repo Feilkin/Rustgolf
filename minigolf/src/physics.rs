@@ -9,6 +9,7 @@ use mela::game::IoState;
 use mela::gfx::primitives::PrimitiveComponent;
 use mela::gfx::primitives::PrimitiveShape;
 use mela::gfx::RenderContext;
+use mela::imgui::Drag;
 use mela::itertools::Itertools;
 use mela::nalgebra as na;
 use mela::nalgebra::{Isometry2, Isometry3, Point2, Similarity2, Vector2};
@@ -692,12 +693,7 @@ where
             }
             let mut temp = current_time.as_secs_f32();
 
-            if ui
-                .drag_float(im_str!("Timer"), &mut temp)
-                .speed(0.1)
-                .min(0.)
-                .build()
-            {
+            if Drag::new(im_str!("Timer")).speed(0.1).build(ui, &mut temp) {
                 *current_time = Duration::from_secs_f32(temp.max(0.));
             }
         } else {

@@ -61,13 +61,13 @@ impl Play {
             })
             .build();
 
-        let radius = 3.1335;
+        let radius = 6.1335;
 
-        for i in 0..625 {
+        for i in 0..169 {
             let f = i as f64;
             let k = f % 2.;
-            let x = 300. + f % 25. * radius * 3.;
-            let y = 200. + (f / 25.).floor() * radius * 3. + k * radius * 0.3;
+            let x = 300. + f % 13. * radius * 3.;
+            let y = 200. + (f / 13.).floor() * radius * 3. + k * radius * 0.3;
 
             seed.balls.push(PhysicsBody {
                 body: Ball { radius },
